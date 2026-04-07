@@ -15,6 +15,7 @@ bin
 .gemini/
 .opencode/
 .qwen/
+.cursor/
 .mcp.json
 CLAUDE.md
 GEMINI.md
