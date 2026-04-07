@@ -1,0 +1,21 @@
+# docs
+.docs/
+
+# AI Agents
+.rulez/
+.claude/
+.agents/
+.codex/
+.gemini/
+.opencode/
+.qwen/
+.mcp.json
+CLAUDE.md
+GEMINI.md
+QWEN.md
+AGENTS.md
+
+# BEGIN MCPKIT
+# mcpkit generated local MCP wrappers
+.mcpkit/
+# END MCPKIT
