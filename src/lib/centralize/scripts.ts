@@ -85,12 +85,14 @@ export interface PublishPreview {
 }
 
 export function parsePublishPreview(output: string): PublishPreview | null {
-  const start = output.lastIndexOf('{')
-  if (start === -1) return null
-
-  try {
-    return JSON.parse(output.slice(start)) as PublishPreview
-  } catch {
-    return null
+  let searchFrom = 0
+  while (true) {
+    const start = output.indexOf('{', searchFrom)
+    if (start === -1) return null
+    try {
+      return JSON.parse(output.slice(start)) as PublishPreview
+    } catch {
+      searchFrom = start + 1
+    }
   }
 }
