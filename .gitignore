@@ -26,4 +26,5 @@ AGENTS.md
 # mcpkit generated local MCP wrappers
 .mcpkit/
 # END MCPKIT
+
 .codegraph/
