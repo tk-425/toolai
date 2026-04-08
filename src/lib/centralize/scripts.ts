@@ -89,8 +89,20 @@ export function parsePublishPreview(output: string): PublishPreview | null {
   while (true) {
     const start = output.indexOf('{', searchFrom)
     if (start === -1) return null
+
+    let depth = 0
+    let end = -1
+    for (let i = start; i < output.length; i++) {
+      if (output[i] === '{') depth++
+      else if (output[i] === '}') {
+        if (--depth === 0) { end = i + 1; break }
+      }
+    }
+
+    if (end === -1) return null
+
     try {
-      return JSON.parse(output.slice(start)) as PublishPreview
+      return JSON.parse(output.slice(start, end)) as PublishPreview
     } catch {
       searchFrom = start + 1
     }
