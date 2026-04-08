@@ -6,7 +6,7 @@ import {getCancelMessage, PromptCancelled, promptForMultiSelect, promptForOperat
 export default class LinkAgents extends Command {
   static override description = 'Interactively manage agent symlinks'
 
-  public async run(): Promise<void> {
+  async run(): Promise<void> {
     try {
       await runLinkFlow({
         adapter: createAgentsAdapter(this.log.bind(this)),

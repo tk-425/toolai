@@ -2,8 +2,7 @@ import {AGENT_TARGETS} from '../config/agent-rules.js'
 import {AGENTS_ROOT} from '../config/paths.js'
 import {ensureSymlink, removeSymlinkOnly} from '../fs/symlinks.js'
 import path from 'node:path'
-import os from 'node:os'
-import {lstat, readdir} from 'node:fs/promises'
+import {resolvePath, safeReaddir, pathIsSymlink} from '../fs/path-helpers.js'
 import {getLinkMarker, targetVisible} from './helpers.js'
 import type {DiscoveredItem, Operation, Scope, TargetEntry} from '../link/types.js'
 
@@ -13,32 +12,6 @@ export function toAgentName(filename: string): string {
 
 export function toAgentSourcePath(name: string): string {
   return `${AGENTS_ROOT}/${name}.md`
-}
-
-function resolvePath(p: string): string {
-  if (p.startsWith('~')) {
-    return path.join(os.homedir(), p.slice(1))
-  }
-  return path.resolve(p)
-}
-
-async function safeReaddir(dir: string) {
-  try {
-    return await readdir(dir, {withFileTypes: true})
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
-    throw error
-  }
-}
-
-async function pathIsSymlink(candidate: string): Promise<boolean> {
-  try {
-    const stat = await lstat(candidate)
-    return stat.isSymbolicLink()
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
-    throw error
-  }
 }
 
 async function countLinked(targetPaths: string[], agentName: string): Promise<number> {

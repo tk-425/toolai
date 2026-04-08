@@ -31,7 +31,11 @@ export async function verifyAliasTargets(
       continue
     }
 
-    await readLink(alias)
+    try {
+      await readLink(alias)
+    } catch {
+      failures.push(alias)
+    }
   }
 
   return {
