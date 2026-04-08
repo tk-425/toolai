@@ -24,6 +24,18 @@ export function formatSectionLabel(label: string): string {
   return pc.cyan(pc.bold(label))
 }
 
+export function formatFieldLabel(label: string): string {
+  return pc.cyan(label.padEnd(8))
+}
+
+export function formatFieldValue(value: string): string {
+  return pc.white(value)
+}
+
+export function formatPathValue(value: string): string {
+  return pc.dim(value)
+}
+
 export function formatSuccess(text: string): string {
   return pc.green(text)
 }
