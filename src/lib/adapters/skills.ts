@@ -2,29 +2,13 @@ import {SKILL_TARGETS, GLOBAL_SKILLS} from '../config/skill-rules.js'
 import {SKILLS_ROOT} from '../config/paths.js'
 import {ensureSymlink, removeSymlinkOnly} from '../fs/symlinks.js'
 import path from 'node:path'
-import os from 'node:os'
-import {lstat, readdir, readlink} from 'node:fs/promises'
+import {lstat, readlink} from 'node:fs/promises'
+import {resolvePath, safeReaddir, pathIsSymlink} from '../fs/path-helpers.js'
 import {getLinkMarker, targetVisible} from './helpers.js'
 import type {DiscoveredItem, Operation, Scope, TargetEntry} from '../link/types.js'
 
 export function isGlobalSkill(name: string): boolean {
   return GLOBAL_SKILLS.has(name)
-}
-
-function resolvePath(p: string): string {
-  if (p.startsWith('~')) {
-    return path.join(os.homedir(), p.slice(1))
-  }
-  return path.resolve(p)
-}
-
-async function safeReaddir(dir: string) {
-  try {
-    return await readdir(dir, {withFileTypes: true})
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
-    throw error
-  }
 }
 
 async function readChildDirectories(dir: string): Promise<string[]> {
@@ -35,16 +19,6 @@ async function readChildDirectories(dir: string): Promise<string[]> {
     .sort()
 }
 
-async function pathIsSymlink(candidate: string): Promise<boolean> {
-  try {
-    const stat = await lstat(candidate)
-    return stat.isSymbolicLink()
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
-    throw error
-  }
-}
-
 async function countLinked(targetPaths: string[], entry: string): Promise<number> {
   let count = 0
   for (const target of targetPaths) {
@@ -52,14 +26,6 @@ async function countLinked(targetPaths: string[], entry: string): Promise<number
     if (await pathIsSymlink(candidate)) {
       count += 1
     }
-  }
-  return count
-}
-
-async function countLinkedMembers(targetPaths: string[], members: string[]): Promise<number> {
-  let count = 0
-  for (const member of members) {
-    count += await countLinked(targetPaths, member)
   }
   return count
 }
@@ -185,9 +151,10 @@ export function createSkillsAdapter(log: (line: string) => void) {
         })
       }
 
+      const skillsRoot = resolvePath(SKILLS_ROOT)
       for (const standalone of standalones) {
         if (GLOBAL_SKILLS.has(standalone)) continue
-        const childDirectories = await readChildDirectories(path.join(resolvePath(SKILLS_ROOT), standalone))
+        const childDirectories = await readChildDirectories(path.join(skillsRoot, standalone))
         if (shouldHideStandaloneBundleSource(standalone, bundleNames, bundleMembership, childDirectories)) continue
         const linkedCount = await countLinked(targetPaths, standalone)
         if (operation === 'remove' && linkedCount === 0) continue

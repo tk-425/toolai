@@ -19,7 +19,6 @@ import {
   runRefresh
 } from '../../lib/centralize/scripts.js'
 import {
-  buildLayoutChoices,
   buildModeChoices,
   buildRepoSelectionChoices,
   promptConfirm,
@@ -248,16 +247,6 @@ async function runAddFlow(command: Command): Promise<void> {
   ])
 
   if (inspection.layout === 'mixed-layout') {
-    const choice = await promptSelect(
-      'Mixed layouts are detected. What would you like to centralize?',
-      buildLayoutChoices()
-    )
-
-    if (choice === 'both') {
-      const proceed = await promptConfirm('This will create both a standalone root install and a bundled nested install. Continue?', false)
-      if (!proceed) return
-    }
-
     command.log(formatWarning('Mixed-layout publishing is not implemented in the CLI yet. Use the existing centralize-skills workflow for this repo shape today.'))
     return
   }
@@ -371,7 +360,7 @@ async function runAddFlow(command: Command): Promise<void> {
 export default class CentralizeSkills extends Command {
   static override description = 'Interactively centralize skills from source repos'
 
-  public async run(): Promise<void> {
+  async run(): Promise<void> {
     try {
       const mode = await promptSelect('What would you like to do?', buildModeChoices())
       if (mode === 'add') {

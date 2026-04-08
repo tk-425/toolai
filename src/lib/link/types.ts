@@ -2,13 +2,6 @@ export type SelectableName = string
 
 export type LinkMarker = '[✓]' | '[-]' | '[ ]'
 
-export interface MenuItem {
-  index: number
-  name: string
-  marker: LinkMarker
-  detail?: string
-}
-
 export type Scope = 'project' | 'global'
 export type Operation = 'add' | 'remove'
 

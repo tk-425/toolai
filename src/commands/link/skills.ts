@@ -6,7 +6,7 @@ import {getCancelMessage, PromptCancelled, promptForMultiSelect, promptForOperat
 export default class LinkSkills extends Command {
   static override description = 'Interactively manage skill symlinks'
 
-  public async run(): Promise<void> {
+  async run(): Promise<void> {
     try {
       await runLinkFlow({
         adapter: createSkillsAdapter(this.log.bind(this)),

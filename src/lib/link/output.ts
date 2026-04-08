@@ -1,12 +1,5 @@
-import type {MenuItem, TargetEntry} from './types.js'
-import {formatBundleLabel, formatFieldLabel, formatFieldValue, formatPathValue, formatSectionLabel, formatSuccess, formatWarning} from './theme.js'
-
-export function formatMenuItem(item: MenuItem): string {
-  const padded = String(item.index).padStart(2, ' ')
-  const suffix = item.detail ? `  ${item.detail}` : ''
-  const name = item.detail === 'bundle' ? formatBundleLabel(item.name) : item.name
-  return `${item.marker} [${padded}]  ${name}${suffix}`
-}
+import type {TargetEntry} from './types.js'
+import {formatFieldLabel, formatFieldValue, formatPathValue, formatSuccess, formatWarning} from './theme.js'
 
 export function formatTargetEntry(entry: TargetEntry, index: number): string {
   const padded = String(index).padStart(2, ' ')

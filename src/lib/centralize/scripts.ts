@@ -85,7 +85,7 @@ export interface PublishPreview {
 }
 
 export function parsePublishPreview(output: string): PublishPreview | null {
-  const start = output.indexOf('{')
+  const start = output.lastIndexOf('{')
   if (start === -1) return null
 
   try {
