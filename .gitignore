@@ -6,6 +6,7 @@ bin
 
 # docs
 .docs/
+docs/superpowers/
 
 # AI Agents
 .rulez/
