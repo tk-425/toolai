@@ -49,7 +49,7 @@ export async function promptForOperation(): Promise<Operation> {
 
 export async function promptForMultiSelect(
   message: string,
-  choices: Array<{name: string; value: string; description?: string}>
+  choices: Array<{name: string; value: string; description?: string; disabled?: boolean | string}>
 ): Promise<string[]> {
   try {
     return await checkbox({message, choices})
