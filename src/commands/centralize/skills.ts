@@ -106,7 +106,7 @@ async function selectPrefix(command: Command, suggestedPrefix: string): Promise<
   return undefined
 }
 
-async function runUpdateFlow(command: Command): Promise<void> {
+export async function runUpdateFlow(command: Command): Promise<void> {
   const installs = await listCentralizedInstalls()
   if (installs.length === 0) {
     command.log(formatWarning('No centralized installs were found.'))
@@ -151,47 +151,47 @@ async function runUpdateFlow(command: Command): Promise<void> {
 
   printLines(command.log.bind(command), formatPreviewSummary(selected, initialParsedPreview, initialDiff))
 
-  if (noSkillChangesDetected) {
-    if (sourceInspection?.isGitRepo) {
-      const shouldPull = await promptConfirm('Pull latest changes from the source repo first?', false)
-      if (shouldPull) {
-        const pullOutput = await pullLatest(resolvePath(selected.sourceRepo))
-        if (pullOutput && !pullOutput.includes('Already up to date.')) command.log(pullOutput)
-      }
-    }
-
-    command.log(formatSuccess('Source repo checked. Centralized install unchanged.'))
-    return
-  }
-
+  let didPullLatest = false
   if (sourceInspection?.isGitRepo) {
     const shouldPull = await promptConfirm('Pull latest changes from the source repo first?', false)
     if (shouldPull) {
+      didPullLatest = true
       const pullOutput = await pullLatest(resolvePath(selected.sourceRepo))
       if (pullOutput && !pullOutput.includes('Already up to date.')) command.log(pullOutput)
     }
   }
 
-  const preview = usesLegacyRefreshCompat
-    ? await runPublish(
-        resolvePath(selected.sourceRepo),
-        storedConfig.bundleName ?? selected.name,
-        storedConfig.prefix,
-        true
-      )
-    : await runRefresh(selected.installedRoot, true)
-  const parsedPreview = parsePublishPreview(preview)
-  if (!parsedPreview) {
-    printLines(command.log.bind(command), [
-      formatSectionLabel('Preview'),
-      preview || '(no preview output)'
-    ])
-    command.log(formatWarning('Could not summarize the preview after pull.'))
-    return
+  let finalPreview = initialParsedPreview
+  let diff = initialDiff
+  if (didPullLatest) {
+    const preview = usesLegacyRefreshCompat
+      ? await runPublish(
+          resolvePath(selected.sourceRepo),
+          storedConfig.bundleName ?? selected.name,
+          storedConfig.prefix,
+          true
+        )
+      : await runRefresh(selected.installedRoot, true)
+    const refreshedPreview = parsePublishPreview(preview)
+    if (!refreshedPreview) {
+      printLines(command.log.bind(command), [
+        formatSectionLabel('Preview'),
+        preview || '(no preview output)'
+      ])
+      command.log(formatWarning('Could not summarize the preview after pull.'))
+      return
+    }
+
+    finalPreview = refreshedPreview
+    diff = diffSkills(storedInstalledSkills, finalPreview.installedSkills)
+    printLines(command.log.bind(command), formatPreviewSummary(selected, finalPreview, diff))
   }
 
-  const diff = diffSkills(storedInstalledSkills, parsedPreview.installedSkills)
-  printLines(command.log.bind(command), formatPreviewSummary(selected, parsedPreview, diff))
+  const noSkillChangesAfterRefresh = diff.added.length === 0 && diff.removed.length === 0
+  if (noSkillChangesAfterRefresh) {
+    command.log(formatSuccess('Source repo checked. Centralized install unchanged.'))
+    return
+  }
 
   const proceed = await promptConfirm('Proceed with update?')
   if (!proceed) return
@@ -206,7 +206,7 @@ async function runUpdateFlow(command: Command): Promise<void> {
   } else {
     await runRefresh(selected.installedRoot, false)
   }
-  printLines(command.log.bind(command), formatSyncSummary(selected, parsedPreview, diff))
+  printLines(command.log.bind(command), formatSyncSummary(selected, finalPreview, diff))
 
   const verification = await verifyConfigPresence([selected.installedRoot], pathExists)
   command.log(verification.ok ? formatSuccess('Update verified.') : formatWarning(`Missing configs: ${verification.failures.join(', ')}`))
