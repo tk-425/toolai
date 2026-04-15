@@ -76,7 +76,6 @@ export function buildBundleEntries(
     const linkedCount = members.reduce((sum, member) => sum + (linkedCounts.get(member) ?? 0), 0)
     const maxLinkedCount = totalTargets * members.length || 1
     if (operation === 'remove' && linkedCount === 0) continue
-    if (operation === 'add' && linkedCount === maxLinkedCount) continue
 
     entries.push({
       name: bundleName,
@@ -137,7 +136,6 @@ export function createSkillsAdapter(log: (line: string) => void) {
         if (bundledMembers.has(alias)) continue
         const linkedCount = linkedCounts.get(alias) ?? 0
         if (operation === 'remove' && linkedCount === 0) continue
-        if (operation === 'add' && linkedCount === totalTargets) continue
         entries.push({
           name: alias,
           marker: getLinkMarker(linkedCount, totalTargets),
@@ -151,7 +149,6 @@ export function createSkillsAdapter(log: (line: string) => void) {
         if (shouldHideStandaloneBundleSource(standalone, bundleNames, bundleMembership, childDirectories)) continue
         const linkedCount = await countLinked(targetPaths, standalone)
         if (operation === 'remove' && linkedCount === 0) continue
-        if (operation === 'add' && linkedCount === totalTargets) continue
         entries.push({
           name: standalone,
           marker: getLinkMarker(linkedCount, totalTargets),

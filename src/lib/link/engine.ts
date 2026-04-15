@@ -25,10 +25,8 @@ export async function runLinkFlow(options: RunLinkFlowOptions): Promise<string[]
         item.kind === 'bundle' ? formatBundleChoiceLabel(item.name) : item.name
       ),
       value: item.name,
-      description:
-        item.marker === '[-]' ? 'Partially linked' :
-        item.marker === '[✓]' ? 'Already linked everywhere' :
-        undefined
+      disabled: item.marker === '[✓]' ? 'Already linked' : undefined,
+      description: item.marker === '[-]' ? 'Partially linked' : undefined
     }))
   )
 

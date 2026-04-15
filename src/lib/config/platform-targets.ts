@@ -24,11 +24,10 @@ export function buildPlatformTargets(
   const suffix = kind === 'skills' ? 'skills' : 'agents'
 
   if (scope === 'project') {
-    return platforms.flatMap(platform => {
-      const root = PROJECT_PLATFORM_ROOTS.get(platform.label)
-      if (!root) return []
-      return [{label: platform.label, path: `${root}/${suffix}`}]
-    })
+    return [...PROJECT_PLATFORM_ROOTS.entries()].map(([label, root]) => ({
+      label,
+      path: `${root}/${suffix}`
+    }))
   }
 
   return platforms.map(platform => ({
