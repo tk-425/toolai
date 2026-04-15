@@ -2,13 +2,15 @@ import {readdir, readFile, stat} from 'node:fs/promises'
 import {basename, join, relative} from 'node:path'
 import {execFile} from 'node:child_process'
 import {promisify} from 'node:util'
-import os from 'node:os'
-import path from 'node:path'
-import {CENTRALIZE_CONFIG_PATH} from '../config/paths.js'
+import {TOOLAI_CONFIG_PATH} from '../config/paths.js'
+import {getConfiguredCentralizeRepoRoot} from '../config/toolai-config.js'
+import {resolvePath} from '../fs/path-helpers.js'
 import type {CentralizedInstall, DiscoveredSkill, RepoInspection, RepoLayout} from './types.js'
 
 const execFileAsync = promisify(execFile)
 const EXCLUDED_SEGMENTS = new Set(['.git', 'node_modules', '.venv', 'dist', 'build', '.next', '.turbo', 'coverage'])
+
+export {resolvePath}
 
 async function hasSkillFile(path: string): Promise<boolean> {
   try {
@@ -61,32 +63,8 @@ async function detectWorkingTreeChanges(repoPath: string): Promise<boolean> {
   }
 }
 
-export function resolvePath(value: string): string {
-  if (value.startsWith('~')) return path.join(os.homedir(), value.slice(1))
-  return path.resolve(value)
-}
-
-export async function readConfiguredRepoRoots(configPath = CENTRALIZE_CONFIG_PATH): Promise<string[]> {
-  const resolvedConfigPath = resolvePath(configPath)
-  const contents = await readFile(resolvedConfigPath, 'utf8')
-  const roots: string[] = []
-  let inSkillsDirs = false
-
-  for (const rawLine of contents.split('\n')) {
-    const line = rawLine.trim()
-    if (!line || line.startsWith('#')) continue
-    if (line === 'skills-dirs:') {
-      inSkillsDirs = true
-      continue
-    }
-
-    if (inSkillsDirs) {
-      if (!line.startsWith('- ')) break
-      roots.push(resolvePath(line.slice(2).trim()))
-    }
-  }
-
-  return roots
+export async function readConfiguredRepoRoots(configPath = TOOLAI_CONFIG_PATH): Promise<string[]> {
+  return [resolvePath(await getConfiguredCentralizeRepoRoot(configPath))]
 }
 
 async function findGitReposUnder(root: string, depth: number, repos: Set<string>): Promise<void> {
@@ -106,7 +84,7 @@ async function findGitReposUnder(root: string, depth: number, repos: Set<string>
   }
 }
 
-export async function discoverConfiguredRepos(configPath = CENTRALIZE_CONFIG_PATH): Promise<string[]> {
+export async function discoverConfiguredRepos(configPath = TOOLAI_CONFIG_PATH): Promise<string[]> {
   const roots = await readConfiguredRepoRoots(configPath)
   const repos = new Set<string>()
 

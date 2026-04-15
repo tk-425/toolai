@@ -1,5 +1,5 @@
 import {AGENT_TARGETS} from '../config/agent-rules.js'
-import {AGENTS_ROOT} from '../config/paths.js'
+import {getConfiguredAgentsRoot} from '../config/toolai-config.js'
 import {ensureSymlink, removeSymlinkOnly} from '../fs/symlinks.js'
 import path from 'node:path'
 import {resolvePath, safeReaddir, pathIsSymlink} from '../fs/path-helpers.js'
@@ -8,10 +8,6 @@ import type {DiscoveredItem, Operation, Scope, TargetEntry} from '../link/types.
 
 export function toAgentName(filename: string): string {
   return filename.replace(/\.md$/, '')
-}
-
-export function toAgentSourcePath(name: string): string {
-  return `${AGENTS_ROOT}/${name}.md`
 }
 
 async function countLinked(targetPaths: string[], agentName: string): Promise<number> {
@@ -27,7 +23,7 @@ async function countLinked(targetPaths: string[], agentName: string): Promise<nu
 }
 
 async function readAgentNames() {
-  const root = resolvePath(AGENTS_ROOT)
+  const root = resolvePath(await getConfiguredAgentsRoot())
   const dirents = await safeReaddir(root)
   const names: string[] = []
 
@@ -99,7 +95,7 @@ export function createAgentsAdapter(log: (line: string) => void) {
         const resolvedTarget = resolvePath(relativePath)
         for (const item of selectedItems) {
           const linkTarget = path.join(resolvedTarget, `${item}.md`)
-          const source = path.join(resolvePath(AGENTS_ROOT), `${item}.md`)
+          const source = path.join(resolvePath(await getConfiguredAgentsRoot()), `${item}.md`)
           if (operation === 'add') {
             try {
               const result = await ensureSymlink(source, linkTarget)

@@ -1,5 +1,5 @@
 import {SKILL_TARGETS, GLOBAL_SKILLS} from '../config/skill-rules.js'
-import {SKILLS_ROOT} from '../config/paths.js'
+import {getConfiguredSkillsRoot} from '../config/toolai-config.js'
 import {ensureSymlink, removeSymlinkOnly} from '../fs/symlinks.js'
 import path from 'node:path'
 import {lstat, readlink} from 'node:fs/promises'
@@ -31,7 +31,7 @@ async function countLinked(targetPaths: string[], entry: string): Promise<number
 }
 
 async function readSkillNames() {
-  const root = resolvePath(SKILLS_ROOT)
+  const root = resolvePath(await getConfiguredSkillsRoot())
   const dirents = await safeReaddir(root)
   const aliases = new Map<string, string>()
   const standalones = new Set<string>()
@@ -151,7 +151,7 @@ export function createSkillsAdapter(log: (line: string) => void) {
         })
       }
 
-      const skillsRoot = resolvePath(SKILLS_ROOT)
+      const skillsRoot = resolvePath(await getConfiguredSkillsRoot())
       for (const standalone of standalones) {
         if (GLOBAL_SKILLS.has(standalone)) continue
         const childDirectories = await readChildDirectories(path.join(skillsRoot, standalone))
@@ -221,7 +221,7 @@ export function createSkillsAdapter(log: (line: string) => void) {
           const members = bundleMembership.get(item) ?? [item]
           for (const member of members) {
             const linkTarget = path.join(resolvedTarget, member)
-            const source = path.join(resolvePath(SKILLS_ROOT), member)
+            const source = path.join(resolvePath(await getConfiguredSkillsRoot()), member)
             if (operation === 'add') {
               try {
                 const result = await ensureSymlink(source, linkTarget)

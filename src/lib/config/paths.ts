@@ -1,5 +1,2 @@
-export const SKILLS_ROOT = '~/.agent-tools/skills'
-export const AGENTS_ROOT = '~/.agent-tools/agents'
-export const CENTRALIZE_SKILL_ROOT = '~/.agent-tools/skills'
-export const CENTRALIZE_CONFIG_PATH = '~/.agent-tools/skills/centralize-skills/config.yaml'
-export const CENTRALIZE_SCRIPTS_ROOT = '~/.agent-tools/skills/centralize-skills/scripts'
+export const TOOLAI_ROOT = '~/.toolai'
+export const TOOLAI_CONFIG_PATH = '~/.toolai/config.yaml'
