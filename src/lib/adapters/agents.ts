@@ -1,4 +1,4 @@
-import {AGENT_TARGETS} from '../config/agent-rules.js'
+import {getAgentTargets} from '../config/platform-targets.js'
 import {getConfiguredAgentsRoot} from '../config/toolai-config.js'
 import {ensureSymlink, removeSymlinkOnly} from '../fs/symlinks.js'
 import path from 'node:path'
@@ -39,7 +39,7 @@ export function createAgentsAdapter(log: (line: string) => void) {
   return {
     async discoverItems(scope: Scope, operation: Operation): Promise<DiscoveredItem[]> {
       log(`discover agents ${scope} ${operation}`)
-      const targetEntries = AGENT_TARGETS[scope]
+      const targetEntries = await getAgentTargets(scope)
       const targetPaths = targetEntries.map(entry => resolvePath(entry.path))
       const totalTargets = targetPaths.length || 1
 
@@ -61,7 +61,7 @@ export function createAgentsAdapter(log: (line: string) => void) {
 
     async discoverTargets(scope: Scope, operation: Operation, selectedItems: string[]): Promise<TargetEntry[]> {
       log(`discover agent targets ${scope} ${operation}`)
-      const entries = AGENT_TARGETS[scope].map(entry => ({
+      const entries = (await getAgentTargets(scope)).map(entry => ({
         name: entry.label,
         path: entry.path,
         resolved: resolvePath(entry.path)
@@ -87,7 +87,7 @@ export function createAgentsAdapter(log: (line: string) => void) {
 
     async apply(scope: Scope, operation: Operation, selectedItems: string[], selectedTargets: string[]): Promise<string[]> {
       log(`apply agent changes ${scope} ${operation}`)
-      const targetsByName = new Map<string, string>(AGENT_TARGETS[scope].map(entry => [entry.label, entry.path]))
+      const targetsByName = new Map<string, string>((await getAgentTargets(scope)).map(entry => [entry.label, entry.path]))
       const lines: string[] = []
       for (const targetName of selectedTargets) {
         const relativePath = targetsByName.get(targetName)

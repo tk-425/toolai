@@ -1,4 +1,4 @@
-import {SKILL_TARGETS, GLOBAL_SKILLS} from '../config/skill-rules.js'
+import {getSkillTargets} from '../config/platform-targets.js'
 import {getConfiguredSkillsRoot} from '../config/toolai-config.js'
 import {ensureSymlink, removeSymlinkOnly} from '../fs/symlinks.js'
 import path from 'node:path'
@@ -6,10 +6,6 @@ import {lstat, readlink} from 'node:fs/promises'
 import {resolvePath, safeReaddir, pathIsSymlink} from '../fs/path-helpers.js'
 import {getLinkMarker, targetVisible} from './helpers.js'
 import type {DiscoveredItem, Operation, Scope, TargetEntry} from '../link/types.js'
-
-export function isGlobalSkill(name: string): boolean {
-  return GLOBAL_SKILLS.has(name)
-}
 
 async function readChildDirectories(dir: string): Promise<string[]> {
   const dirents = await safeReaddir(dir)
@@ -58,7 +54,7 @@ export function detectBundles(aliases: Map<string, string>): Map<string, string[
     const slash = target.indexOf('/')
     if (slash === -1) continue
     const bundle = target.slice(0, slash)
-    if (bundle.startsWith('.') || GLOBAL_SKILLS.has(bundle)) continue
+    if (bundle.startsWith('.')) continue
 
     const members = bundles.get(bundle) ?? []
     members.push(alias)
@@ -116,7 +112,7 @@ export function createSkillsAdapter(log: (line: string) => void) {
   return {
     async discoverItems(scope: Scope, operation: Operation): Promise<DiscoveredItem[]> {
       log(`discover skills ${scope} ${operation}`)
-      const targetEntries = SKILL_TARGETS[scope]
+      const targetEntries = await getSkillTargets(scope)
       const targetPaths = targetEntries.map(entry => resolvePath(entry.path))
       const totalTargets = targetPaths.length || 1
 
@@ -129,7 +125,6 @@ export function createSkillsAdapter(log: (line: string) => void) {
       const linkedCounts = new Map<string, number>()
 
       for (const alias of aliases.keys()) {
-        if (GLOBAL_SKILLS.has(alias)) continue
         if (alias === 'gstack') continue
         const linkedCount = await countLinked(targetPaths, alias)
         linkedCounts.set(alias, linkedCount)
@@ -138,7 +133,6 @@ export function createSkillsAdapter(log: (line: string) => void) {
       entries.push(...buildBundleEntries(bundleMembership, linkedCounts, totalTargets, operation))
 
       for (const alias of aliases.keys()) {
-        if (GLOBAL_SKILLS.has(alias)) continue
         if (alias === 'gstack') continue
         if (bundledMembers.has(alias)) continue
         const linkedCount = linkedCounts.get(alias) ?? 0
@@ -153,7 +147,6 @@ export function createSkillsAdapter(log: (line: string) => void) {
 
       const skillsRoot = resolvePath(await getConfiguredSkillsRoot())
       for (const standalone of standalones) {
-        if (GLOBAL_SKILLS.has(standalone)) continue
         const childDirectories = await readChildDirectories(path.join(skillsRoot, standalone))
         if (shouldHideStandaloneBundleSource(standalone, bundleNames, bundleMembership, childDirectories)) continue
         const linkedCount = await countLinked(targetPaths, standalone)
@@ -179,7 +172,7 @@ export function createSkillsAdapter(log: (line: string) => void) {
       log(`discover skill targets ${scope} ${operation}`)
       const {aliases} = await readSkillNames()
       const bundleMembership = detectBundles(aliases)
-      const entries = SKILL_TARGETS[scope].map(entry => ({
+      const entries = (await getSkillTargets(scope)).map(entry => ({
         name: entry.label,
         path: entry.path,
         resolved: resolvePath(entry.path)
@@ -211,7 +204,7 @@ export function createSkillsAdapter(log: (line: string) => void) {
       log(`apply skill changes ${scope} ${operation}`)
       const {aliases} = await readSkillNames()
       const bundleMembership = detectBundles(aliases)
-      const targetsByName = new Map<string, string>(SKILL_TARGETS[scope].map(entry => [entry.label, entry.path]))
+      const targetsByName = new Map<string, string>((await getSkillTargets(scope)).map(entry => [entry.label, entry.path]))
       const lines: string[] = []
       for (const targetName of selectedTargets) {
         const relativePath = targetsByName.get(targetName)

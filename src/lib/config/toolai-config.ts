@@ -3,10 +3,16 @@ import path from 'node:path'
 import {TOOLAI_CONFIG_PATH} from './paths.js'
 import {resolvePath} from '../fs/path-helpers.js'
 
+export interface ToolaiPlatformConfig {
+  label: string
+  base: string
+}
+
 export interface ToolaiConfig {
   skillsRoot: string
   agentsRoot: string
   centralizeRepoRoot: string
+  platforms: ToolaiPlatformConfig[]
 }
 
 export class ToolaiConfigError extends Error {
@@ -24,7 +30,19 @@ paths:
 
 centralize:
   skills-dirs:
+
+platforms:
 `
+
+export const DEFAULT_PLATFORM_CONFIG: ToolaiPlatformConfig[] = [
+  {label: 'Claude Code', base: '~/.claude'},
+  {label: 'Codex', base: '~/.codex'},
+  {label: 'Gemini', base: '~/.gemini'},
+  {label: 'Cursor', base: '~/.cursor'},
+  {label: 'Antigravity', base: '~/.agents'},
+  {label: 'OpenCode', base: '~/.opencode'},
+  {label: 'Qwen', base: '~/.qwen'}
+]
 
 export function getToolaiConfigPath(configPath = TOOLAI_CONFIG_PATH): string {
   return resolvePath(configPath)
@@ -60,25 +78,48 @@ export async function readToolaiConfig(configPath = TOOLAI_CONFIG_PATH): Promise
 
   let inPaths = false
   let inCentralize = false
+  let inPlatforms = false
   let inSkillsDirs = false
   let skillsRoot = ''
   let agentsRoot = ''
   const repoRoots: string[] = []
+  const platforms: ToolaiPlatformConfig[] = []
+  let currentPlatform: Partial<ToolaiPlatformConfig> | null = null
+
+  function pushCurrentPlatform() {
+    if (currentPlatform?.label && currentPlatform.base) {
+      platforms.push({label: currentPlatform.label, base: currentPlatform.base})
+    }
+    currentPlatform = null
+  }
 
   for (const rawLine of contents.split('\n')) {
     const line = rawLine.trim()
     if (!line || line.startsWith('#')) continue
 
     if (line === 'paths:') {
+      pushCurrentPlatform()
       inPaths = true
       inCentralize = false
+      inPlatforms = false
       inSkillsDirs = false
       continue
     }
 
     if (line === 'centralize:') {
+      pushCurrentPlatform()
       inCentralize = true
       inPaths = false
+      inPlatforms = false
+      inSkillsDirs = false
+      continue
+    }
+
+    if (line === 'platforms:') {
+      pushCurrentPlatform()
+      inPlatforms = true
+      inPaths = false
+      inCentralize = false
       inSkillsDirs = false
       continue
     }
@@ -107,12 +148,26 @@ export async function readToolaiConfig(configPath = TOOLAI_CONFIG_PATH): Promise
         repoRoots.push(line.slice(2).trim())
       }
     }
+
+    if (inPlatforms) {
+      if (line.startsWith('- label:')) {
+        pushCurrentPlatform()
+        currentPlatform = {label: line.slice('- label:'.length).trim()}
+        continue
+      }
+      if (line.startsWith('base:')) {
+        currentPlatform = {...currentPlatform, base: line.slice('base:'.length).trim()}
+      }
+    }
   }
+
+  pushCurrentPlatform()
 
   return {
     skillsRoot,
     agentsRoot,
-    centralizeRepoRoot: repoRoots[0] ?? ''
+    centralizeRepoRoot: repoRoots[0] ?? '',
+    platforms
   }
 }
 
@@ -126,6 +181,7 @@ export async function requireToolaiConfig(configPath = TOOLAI_CONFIG_PATH): Prom
 
 export async function writeToolaiConfig(config: ToolaiConfig, configPath = TOOLAI_CONFIG_PATH): Promise<void> {
   const resolvedConfigPath = getToolaiConfigPath(configPath)
+  const platforms = config.platforms ?? []
   await mkdir(path.dirname(resolvedConfigPath), {recursive: true})
   await writeFile(
     resolvedConfigPath,
@@ -139,10 +195,21 @@ export async function writeToolaiConfig(config: ToolaiConfig, configPath = TOOLA
       'centralize:',
       '  skills-dirs:',
       `    - ${config.centralizeRepoRoot}`,
+      '',
+      'platforms:',
+      ...platforms.flatMap(platform => [
+        `  - label: ${platform.label}`,
+        `    base: ${platform.base}`
+      ]),
       ''
     ].join('\n'),
     'utf8'
   )
+}
+
+export async function getConfiguredPlatforms(configPath = TOOLAI_CONFIG_PATH): Promise<ToolaiPlatformConfig[]> {
+  const config = await requireToolaiConfig(configPath)
+  return config.platforms.length ? config.platforms : DEFAULT_PLATFORM_CONFIG
 }
 
 export async function getConfiguredSkillsRoot(configPath = TOOLAI_CONFIG_PATH): Promise<string> {
