@@ -18,6 +18,8 @@ import {
   runPublish,
   runRefresh
 } from '../../lib/centralize/scripts.js'
+import {getConfiguredSkillsRoot} from '../../lib/config/toolai-config.js'
+import {ToolaiConfigError} from '../../lib/config/toolai-config.js'
 import {
   buildModeChoices,
   buildRepoSelectionChoices,
@@ -213,11 +215,21 @@ export async function runUpdateFlow(command: Command): Promise<void> {
 }
 
 async function runAddFlow(command: Command): Promise<void> {
+  const centralSkillsRoot = resolvePath(await getConfiguredSkillsRoot())
   const repoMode = await promptSelect('How would you like to choose the source repo?', buildRepoSelectionChoices())
   let repoPath = ''
 
   if (repoMode === 'configured') {
-    const repos = await discoverConfiguredRepos()
+    let repos: string[] = []
+    try {
+      repos = await discoverConfiguredRepos()
+    } catch (error) {
+      if (error instanceof ToolaiConfigError) {
+        command.log(formatWarning(error.message))
+        return
+      }
+      throw error
+    }
     if (repos.length === 0) {
       command.log(formatWarning('No configured repos were discovered.'))
       return
@@ -274,14 +286,14 @@ async function runAddFlow(command: Command): Promise<void> {
 
   while (true) {
     const installRoots = bundleNeeded
-      ? [path.join(resolvePath('~/.agent-tools/skills'), bundleName!)]
-      : [path.join(resolvePath('~/.agent-tools/skills'), prefix ? `${prefix}-${discoveredSkills[0]}` : discoveredSkills[0])]
+      ? [path.join(centralSkillsRoot, bundleName!)]
+      : [path.join(centralSkillsRoot, prefix ? `${prefix}-${discoveredSkills[0]}` : discoveredSkills[0])]
     const topLevelAliases = bundleNeeded
-      ? discoveredSkills.map(skill => path.join(resolvePath('~/.agent-tools/skills'), prefix ? `${prefix}-${skill}` : skill))
+      ? discoveredSkills.map(skill => path.join(centralSkillsRoot, prefix ? `${prefix}-${skill}` : skill))
       : []
 
     const conflicts = await detectConflicts({
-      centralRoot: resolvePath('~/.agent-tools/skills'),
+      centralRoot: centralSkillsRoot,
       installRoots,
       topLevelAliases,
       pathExists
@@ -340,8 +352,8 @@ async function runAddFlow(command: Command): Promise<void> {
     prefix: prefix ?? '',
     sourceRepo: repoPath,
     installedRoot: bundleNeeded
-      ? path.join(resolvePath('~/.agent-tools/skills'), bundleName!)
-      : path.join(resolvePath('~/.agent-tools/skills'), prefix ? `${prefix}-${discoveredSkills[0]}` : discoveredSkills[0])
+      ? path.join(centralSkillsRoot, bundleName!)
+      : path.join(centralSkillsRoot, prefix ? `${prefix}-${discoveredSkills[0]}` : discoveredSkills[0])
   }
 
   if (parsedOutput) {
@@ -351,8 +363,8 @@ async function runAddFlow(command: Command): Promise<void> {
   }
 
   const verificationRoots = bundleNeeded
-    ? [path.join(resolvePath('~/.agent-tools/skills'), bundleName!)]
-    : [path.join(resolvePath('~/.agent-tools/skills'), prefix ? `${prefix}-${discoveredSkills[0]}` : discoveredSkills[0])]
+    ? [path.join(centralSkillsRoot, bundleName!)]
+    : [path.join(centralSkillsRoot, prefix ? `${prefix}-${discoveredSkills[0]}` : discoveredSkills[0])]
   const verification = await verifyConfigPresence(verificationRoots, pathExists)
   command.log(verification.ok ? formatSuccess('Publish verified.') : formatWarning(`Missing configs: ${verification.failures.join(', ')}`))
 }
