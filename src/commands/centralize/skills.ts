@@ -108,7 +108,7 @@ async function selectPrefix(command: Command, suggestedPrefix: string): Promise<
   return undefined
 }
 
-export async function runUpdateFlow(command: Command): Promise<void> {
+async function runUpdateFlow(command: Command): Promise<void> {
   const installs = await listCentralizedInstalls()
   if (installs.length === 0) {
     command.log(formatWarning('No centralized installs were found.'))
@@ -157,9 +157,9 @@ export async function runUpdateFlow(command: Command): Promise<void> {
   if (sourceInspection?.isGitRepo) {
     const shouldPull = await promptConfirm('Pull latest changes from the source repo first?', false)
     if (shouldPull) {
-      didPullLatest = true
       const pullOutput = await pullLatest(resolvePath(selected.sourceRepo))
-      if (pullOutput && !pullOutput.includes('Already up to date.')) command.log(pullOutput)
+      didPullLatest = Boolean(pullOutput) && !pullOutput.includes('Already up to date.')
+      if (didPullLatest) command.log(pullOutput)
     }
   }
 

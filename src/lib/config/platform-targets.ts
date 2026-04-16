@@ -1,9 +1,19 @@
+import {access} from 'node:fs/promises'
 import type {Scope} from '../link/types.js'
 import {getConfiguredPlatforms, type ToolaiPlatformConfig} from './toolai-config.js'
 
 export interface PlatformTargetEntry {
   label: string
   path: string
+}
+
+async function pathExists(candidate: string): Promise<boolean> {
+  try {
+    await access(candidate)
+    return true
+  } catch {
+    return false
+  }
 }
 
 const PROJECT_PLATFORM_ROOTS = new Map([
@@ -16,18 +26,23 @@ const PROJECT_PLATFORM_ROOTS = new Map([
   ['Qwen', '.qwen']
 ])
 
-export function buildPlatformTargets(
+export async function buildPlatformTargets(
   scope: Scope,
   kind: 'skills' | 'agents',
-  platforms: ToolaiPlatformConfig[]
-): PlatformTargetEntry[] {
+  platforms: ToolaiPlatformConfig[],
+  projectRootExists: (path: string) => Promise<boolean> = pathExists
+): Promise<PlatformTargetEntry[]> {
   const suffix = kind === 'skills' ? 'skills' : 'agents'
 
   if (scope === 'project') {
-    return [...PROJECT_PLATFORM_ROOTS.entries()].map(([label, root]) => ({
-      label,
-      path: `${root}/${suffix}`
-    }))
+    const entries = await Promise.all(
+      [...PROJECT_PLATFORM_ROOTS.entries()].map(async ([label, root]) => (
+        await projectRootExists(root)
+          ? {label, path: `${root}/${suffix}`}
+          : null
+      ))
+    )
+    return entries.filter(entry => entry !== null)
   }
 
   return platforms.map(platform => ({

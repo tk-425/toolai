@@ -3,7 +3,6 @@ import {
   DEFAULT_PLATFORM_CONFIG,
   readToolaiConfig,
   getToolaiConfigPath,
-  mergePlatforms,
   toolaiConfigExists,
   type ToolaiPlatformConfig,
   writeToolaiConfig
@@ -56,7 +55,7 @@ export default class Init extends Command {
         skillsRoot,
         agentsRoot,
         centralizeRepoRoot,
-        platforms: mergePlatforms([...basePlatforms, ...customPlatforms])
+        platforms: [...basePlatforms, ...customPlatforms]
       }, configPath)
       this.log(formatSuccess(`Initialized toolai config at ${configPath}`))
     } catch (error) {

@@ -1,6 +1,5 @@
 import {cp, lstat, mkdir, readFile, readdir, readlink, rename, rm, symlink, writeFile} from 'node:fs/promises'
 import path, {basename, join, relative} from 'node:path'
-import {tmpdir} from 'node:os'
 import {getConfiguredSkillsRoot} from '../config/toolai-config.js'
 import {resolvePath} from '../fs/path-helpers.js'
 import type {CentralizedInstall} from './types.js'
@@ -110,9 +109,10 @@ async function discoverSkillDirs(sourceRepo: string): Promise<string[]> {
 }
 
 async function copyDirAtomic(src: string, dest: string): Promise<void> {
-  const stage = join(tmpdir(), `${basename(dest)}.tmp-${process.pid}-${Date.now()}`)
+  const destDir = path.dirname(dest)
+  const stage = join(destDir, `.tmp-${basename(dest)}-${process.pid}-${Date.now()}`)
+  await mkdir(destDir, {recursive: true})
   await rm(stage, {recursive: true, force: true})
-  await mkdir(path.dirname(dest), {recursive: true})
   await cp(src, stage, {recursive: true})
   await rm(dest, {recursive: true, force: true})
   await rename(stage, dest)
@@ -168,14 +168,6 @@ async function writeInstallConfig(configPath: string, payload: ReturnType<typeof
 async function readStoredInstallConfig(installRoot: string): Promise<StoredInstallConfig> {
   const contents = await readFile(join(installRoot, '.centralize-config.json'), 'utf8')
   return JSON.parse(contents) as StoredInstallConfig
-}
-
-async function ensureNoConflictingPath(targetPath: string, expectedSymlink = false): Promise<void> {
-  const info = await pathInfo(targetPath)
-  if (!info) return
-  if (expectedSymlink && info.isSymbolicLink()) return
-  if (!expectedSymlink && info.isDirectory()) return
-  throw new Error(`conflicting target paths exist: ${targetPath}`)
 }
 
 async function removeOwnedBundleAliases(input: {

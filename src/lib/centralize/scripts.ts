@@ -78,10 +78,34 @@ export function parsePublishPreview(output: string): PublishPreview | null {
     if (start === -1) return null
 
     let depth = 0
+    let inString = false
+    let isEscaped = false
     let end = -1
     for (let i = start; i < output.length; i++) {
-      if (output[i] === '{') depth++
-      else if (output[i] === '}') {
+      const character = output[i]
+
+      if (inString) {
+        if (isEscaped) {
+          isEscaped = false
+          continue
+        }
+
+        if (character === '\\') {
+          isEscaped = true
+          continue
+        }
+
+        if (character === '"') inString = false
+        continue
+      }
+
+      if (character === '"') {
+        inString = true
+        continue
+      }
+
+      if (character === '{') depth++
+      else if (character === '}') {
         if (--depth === 0) { end = i + 1; break }
       }
     }
