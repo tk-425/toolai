@@ -2,6 +2,8 @@ import {checkbox, confirm, input, select} from '@inquirer/prompts'
 import {isPromptCancel, PromptCancelled} from '../link/prompts.js'
 import type {CentralizeMode, Choice, LayoutChoice, RepoSelectionMode} from './types.js'
 
+const SCROLL_HINT_PAGE_SIZE = 10
+
 export function wrapPromptError(error: unknown): never {
   if (isPromptCancel(error)) throw new PromptCancelled()
 
@@ -38,9 +40,17 @@ export function buildLayoutChoices(): Array<Choice<LayoutChoice>> {
   ]
 }
 
+function formatScrollableMessage(message: string, choiceCount: number): string {
+  return `${message} (${choiceCount} available, use arrow keys to see more if needed)`
+}
+
 export async function promptSelect<T extends string>(message: string, choices: Array<Choice<T>>): Promise<T> {
   try {
-    return await select({message, choices})
+    return await select({
+      message: formatScrollableMessage(message, choices.length),
+      choices,
+      pageSize: SCROLL_HINT_PAGE_SIZE
+    })
   } catch (error) {
     wrapPromptError(error)
   }

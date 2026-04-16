@@ -17,20 +17,42 @@ export async function runLinkFlow(options: RunLinkFlowOptions): Promise<string[]
   const scope = await options.promptForScope()
   const operation = await options.promptForOperation()
   const items = await options.adapter.discoverItems(scope, operation)
+  if (items.length === 0) {
+    options.render([
+      'No items are available for the selected scope and operation.'
+    ])
+    return []
+  }
+
+  const itemChoices = items.map(item => ({
+    name: formatChoiceLabel(
+      item.marker,
+      item.kind === 'bundle' ? formatBundleChoiceLabel(item.name) : item.name
+    ),
+    value: item.name,
+    disabled: operation === 'add' && item.marker === '[✓]' ? 'Already linked' : undefined,
+    description: item.marker === '[-]' ? 'Partially linked' : undefined
+  }))
+
+  if (itemChoices.every(choice => choice.disabled)) {
+    options.render([
+      'All discovered items are already linked for the selected scope.'
+    ])
+    return []
+  }
+
   const selectedItems = await options.promptForMultiSelect(
     'Select items',
-    items.map(item => ({
-      name: formatChoiceLabel(
-        item.marker,
-        item.kind === 'bundle' ? formatBundleChoiceLabel(item.name) : item.name
-      ),
-      value: item.name,
-      disabled: operation === 'add' && item.marker === '[✓]' ? 'Already linked' : undefined,
-      description: item.marker === '[-]' ? 'Partially linked' : undefined
-    }))
+    itemChoices
   )
 
   const targets = await options.adapter.discoverTargets(scope, operation, selectedItems)
+  if (targets.length === 0) {
+    options.render([
+      'No targets available for the selected scope. If you chose project scope, run this command from the project root or choose global.'
+    ])
+    return []
+  }
   const targetChoices = [
     ...(targets.length > 1 ? [{name: 'All', value: '__all__'}] : []),
     ...targets.map(target => ({

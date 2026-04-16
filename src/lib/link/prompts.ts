@@ -2,6 +2,8 @@ import {checkbox, select} from '@inquirer/prompts'
 import type {Operation, Scope} from './types.js'
 import {formatExitMessage} from './theme.js'
 
+const SCROLL_HINT_PAGE_SIZE = 10
+
 export class PromptCancelled extends Error {
   constructor() {
     super(formatExitMessage())
@@ -15,6 +17,10 @@ export function isPromptCancel(error: unknown): boolean {
 
 export function getCancelMessage(): string {
   return formatExitMessage()
+}
+
+function formatScrollableMessage(message: string, choiceCount: number): string {
+  return `${message} (${choiceCount} available, use arrow keys to see more if needed)`
 }
 
 export async function promptForScope(): Promise<Scope> {
@@ -52,7 +58,11 @@ export async function promptForMultiSelect(
   choices: Array<{name: string; value: string; description?: string; disabled?: boolean | string}>
 ): Promise<string[]> {
   try {
-    return await checkbox({message, choices})
+    return await checkbox({
+      message: formatScrollableMessage(message, choices.length),
+      choices,
+      pageSize: SCROLL_HINT_PAGE_SIZE
+    })
   } catch (error) {
     if (isPromptCancel(error)) throw new PromptCancelled()
     throw error

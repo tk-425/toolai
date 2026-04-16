@@ -40,7 +40,7 @@ export function createAgentsAdapter(log: (line: string) => void) {
     async discoverItems(scope: Scope, operation: Operation): Promise<DiscoveredItem[]> {
       log(`discover agents ${scope} ${operation}`)
       const targetEntries = await getAgentTargets(scope)
-      const targetPaths = targetEntries.map(entry => resolvePath(entry.path))
+      const targetPaths = targetEntries.map(entry => resolvePath(entry.resolvedPath))
       const totalTargets = targetPaths.length || 1
 
       const agentNames = await readAgentNames()
@@ -64,7 +64,7 @@ export function createAgentsAdapter(log: (line: string) => void) {
       const entries = (await getAgentTargets(scope)).map(entry => ({
         name: entry.label,
         path: entry.path,
-        resolved: resolvePath(entry.path)
+        resolved: resolvePath(entry.resolvedPath)
       }))
 
       const result: TargetEntry[] = []
@@ -87,12 +87,12 @@ export function createAgentsAdapter(log: (line: string) => void) {
 
     async apply(scope: Scope, operation: Operation, selectedItems: string[], selectedTargets: string[]): Promise<string[]> {
       log(`apply agent changes ${scope} ${operation}`)
-      const targetsByName = new Map<string, string>((await getAgentTargets(scope)).map(entry => [entry.label, entry.path]))
+      const targetsByName = new Map<string, string>((await getAgentTargets(scope)).map(entry => [entry.label, entry.resolvedPath]))
       const lines: string[] = []
       for (const targetName of selectedTargets) {
-        const relativePath = targetsByName.get(targetName)
-        if (!relativePath) continue
-        const resolvedTarget = resolvePath(relativePath)
+        const targetPath = targetsByName.get(targetName)
+        if (!targetPath) continue
+        const resolvedTarget = resolvePath(targetPath)
         for (const item of selectedItems) {
           const linkTarget = path.join(resolvedTarget, `${item}.md`)
           const source = path.join(resolvePath(await getConfiguredAgentsRoot()), `${item}.md`)

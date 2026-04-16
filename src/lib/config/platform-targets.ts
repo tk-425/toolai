@@ -1,19 +1,11 @@
-import {access} from 'node:fs/promises'
+import path from 'node:path'
 import type {Scope} from '../link/types.js'
 import {getConfiguredPlatforms, type ToolaiPlatformConfig} from './toolai-config.js'
 
 export interface PlatformTargetEntry {
   label: string
   path: string
-}
-
-async function pathExists(candidate: string): Promise<boolean> {
-  try {
-    await access(candidate)
-    return true
-  } catch {
-    return false
-  }
+  resolvedPath: string
 }
 
 const PROJECT_PLATFORM_ROOTS = new Map([
@@ -30,24 +22,24 @@ export async function buildPlatformTargets(
   scope: Scope,
   kind: 'skills' | 'agents',
   platforms: ToolaiPlatformConfig[],
-  projectRootExists: (path: string) => Promise<boolean> = pathExists
+  _projectRootExists?: (path: string) => Promise<boolean>,
+  cwd = process.cwd()
 ): Promise<PlatformTargetEntry[]> {
   const suffix = kind === 'skills' ? 'skills' : 'agents'
 
   if (scope === 'project') {
-    const entries = await Promise.all(
-      [...PROJECT_PLATFORM_ROOTS.entries()].map(async ([label, root]) => (
-        await projectRootExists(root)
-          ? {label, path: `${root}/${suffix}`}
-          : null
-      ))
-    )
-    return entries.filter(entry => entry !== null)
+    const projectRoot = path.resolve(cwd)
+    return [...PROJECT_PLATFORM_ROOTS.entries()].map(([label, root]) => ({
+      label,
+      path: `${root}/${suffix}`,
+      resolvedPath: path.join(projectRoot, root, suffix)
+    }))
   }
 
   return platforms.map(platform => ({
     label: platform.label,
-    path: `${platform.base}/${suffix}`
+    path: `${platform.base}/${suffix}`,
+    resolvedPath: `${platform.base}/${suffix}`
   }))
 }
 
