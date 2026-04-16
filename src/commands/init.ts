@@ -3,21 +3,15 @@ import {
   DEFAULT_PLATFORM_CONFIG,
   readToolaiConfig,
   getToolaiConfigPath,
+  mergePlatforms,
   toolaiConfigExists,
   type ToolaiPlatformConfig,
   writeToolaiConfig
 } from '../lib/config/toolai-config.js'
+import {promptForCustomPlatformLabel, promptForRequiredValue} from '../lib/config/platform-prompts.js'
 import {promptConfirm, promptInput} from '../lib/centralize/prompts.js'
 import {getCancelMessage, PromptCancelled} from '../lib/link/prompts.js'
 import {formatSuccess, formatWarning} from '../lib/link/theme.js'
-
-function dedupePlatforms(platforms: ToolaiPlatformConfig[]): ToolaiPlatformConfig[] {
-  const deduped = new Map<string, ToolaiPlatformConfig>()
-  for (const platform of platforms) {
-    deduped.set(platform.label, platform)
-  }
-  return Array.from(deduped.values())
-}
 
 export default class Init extends Command {
   static override description = 'Initialize toolai path configuration'
@@ -42,8 +36,18 @@ export default class Init extends Command {
 
       let shouldAddCustomPlatform = await promptConfirm('Would you like to add a custom platform?', false)
       while (shouldAddCustomPlatform) {
-        const label = (await promptInput('What is the platform label?')).trim()
-        const base = (await promptInput('What is the platform base path?')).trim()
+        const label = await promptForCustomPlatformLabel(
+          promptInput,
+          promptConfirm,
+          this.log.bind(this),
+          customPlatforms
+        )
+        const base = await promptForRequiredValue(
+          promptInput,
+          this.log.bind(this),
+          'What is the platform base path?',
+          'Platform base path cannot be empty.'
+        )
         customPlatforms.push({label, base})
         shouldAddCustomPlatform = await promptConfirm('Would you like to add another custom platform?', false)
       }
@@ -52,7 +56,7 @@ export default class Init extends Command {
         skillsRoot,
         agentsRoot,
         centralizeRepoRoot,
-        platforms: dedupePlatforms([...basePlatforms, ...customPlatforms])
+        platforms: mergePlatforms([...basePlatforms, ...customPlatforms])
       }, configPath)
       this.log(formatSuccess(`Initialized toolai config at ${configPath}`))
     } catch (error) {

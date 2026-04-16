@@ -44,6 +44,24 @@ export const DEFAULT_PLATFORM_CONFIG: ToolaiPlatformConfig[] = [
   {label: 'Qwen', base: '~/.qwen'}
 ]
 
+export const DEFAULT_PLATFORM_LABELS = new Set(DEFAULT_PLATFORM_CONFIG.map(platform => platform.label))
+
+export function mergePlatforms(platforms: ToolaiPlatformConfig[]): ToolaiPlatformConfig[] {
+  const deduped = new Map<string, ToolaiPlatformConfig>()
+  for (const platform of platforms) {
+    deduped.set(platform.label, platform)
+  }
+  return Array.from(deduped.values())
+}
+
+export function isDefaultPlatformLabel(label: string): boolean {
+  return DEFAULT_PLATFORM_LABELS.has(label)
+}
+
+export function getStoredCustomPlatformsFromConfig(config: ToolaiConfig): ToolaiPlatformConfig[] {
+  return config.platforms.filter(platform => !isDefaultPlatformLabel(platform.label))
+}
+
 export function getToolaiConfigPath(configPath = TOOLAI_CONFIG_PATH): string {
   return resolvePath(configPath)
 }
@@ -181,7 +199,7 @@ export async function requireToolaiConfig(configPath = TOOLAI_CONFIG_PATH): Prom
 
 export async function writeToolaiConfig(config: ToolaiConfig, configPath = TOOLAI_CONFIG_PATH): Promise<void> {
   const resolvedConfigPath = getToolaiConfigPath(configPath)
-  const platforms = config.platforms ?? []
+  const platforms = mergePlatforms(config.platforms ?? [])
   await mkdir(path.dirname(resolvedConfigPath), {recursive: true})
   await writeFile(
     resolvedConfigPath,
@@ -207,9 +225,22 @@ export async function writeToolaiConfig(config: ToolaiConfig, configPath = TOOLA
   )
 }
 
-export async function getConfiguredPlatforms(configPath = TOOLAI_CONFIG_PATH): Promise<ToolaiPlatformConfig[]> {
+export async function getStoredCustomPlatforms(configPath = TOOLAI_CONFIG_PATH): Promise<ToolaiPlatformConfig[]> {
   const config = await requireToolaiConfig(configPath)
-  return config.platforms.length ? config.platforms : DEFAULT_PLATFORM_CONFIG
+  return getStoredCustomPlatformsFromConfig(config)
+}
+
+export async function writeStoredCustomPlatforms(
+  platforms: ToolaiPlatformConfig[],
+  configPath = TOOLAI_CONFIG_PATH
+): Promise<void> {
+  const config = await requireToolaiConfig(configPath)
+  await writeToolaiConfig({...config, platforms: mergePlatforms(platforms)}, configPath)
+}
+
+export async function getConfiguredPlatforms(configPath = TOOLAI_CONFIG_PATH): Promise<ToolaiPlatformConfig[]> {
+  const customPlatforms = await getStoredCustomPlatforms(configPath)
+  return mergePlatforms([...DEFAULT_PLATFORM_CONFIG, ...customPlatforms])
 }
 
 export async function getConfiguredSkillsRoot(configPath = TOOLAI_CONFIG_PATH): Promise<string> {
