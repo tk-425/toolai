@@ -30,6 +30,18 @@ After linking, the `toolai` command is available globally.
 
 ## Commands
 
+### Platform model
+
+`toolai` treats platforms in two groups:
+
+- **Built-in platforms** — Claude Code, Codex, Gemini, Cursor, Antigravity, OpenCode, and Qwen
+- **Custom global platforms** — user-managed entries stored in `~/.toolai/config.yaml`
+
+Scope rules:
+- **Project scope** uses built-in platforms only
+- **Global scope** uses built-in platforms plus any configured custom global platforms
+- **Custom platforms are global-only** and do not participate in project scope
+
 ### `toolai init`
 
 Bootstrap `~/.toolai/config.yaml` interactively.
@@ -38,8 +50,70 @@ It asks for:
 1. central skills location
 2. central agents location
 3. default source-repo root for `toolai centralize skills` when using `Configured repos`
+4. optional custom global platforms to add on top of the built-in defaults
 
 If `toolai` is already initialized, it warns and asks whether you want to update the configuration.
+
+Custom platform labels and base paths are validated during init:
+- blank values are rejected and re-prompted
+- duplicate custom labels warn before replacement
+
+Built-in platforms remain managed by the CLI defaults:
+- Claude Code
+- Codex
+- Gemini
+- Cursor
+- Antigravity
+- OpenCode
+- Qwen
+
+Custom global platforms are stored in `~/.toolai/config.yaml` and layered on top of those defaults.
+
+Example:
+
+```bash
+toolai init
+```
+
+### `toolai config platforms list`
+
+List configured custom global platforms stored in `~/.toolai/config.yaml`.
+
+This command does not list built-in defaults.
+
+Example:
+
+```bash
+toolai config platforms list
+```
+
+### `toolai config platforms add`
+
+Add a custom global platform without rerunning full `toolai init`.
+
+The command prompts for:
+- platform label
+- platform base path
+
+Blank values are rejected. If the label already exists in custom config, `toolai` warns before replacement.
+
+Example:
+
+```bash
+toolai config platforms add
+```
+
+### `toolai config platforms remove`
+
+Remove a configured custom global platform.
+
+This command only removes custom global entries. Built-in defaults are not removable through this flow.
+
+Example:
+
+```bash
+toolai config platforms remove
+```
 
 ### `toolai link skills`
 
@@ -53,13 +127,19 @@ Flow:
 
 Project targets: `.claude/skills`, `.codex/skills`, `.gemini/skills`, `.cursor/skills`, `.agents/skills`, `.opencode/skills`, `.qwen/skills`
 
-Global targets: `~/.claude/skills`, `~/.claude2/skills`, `~/.claude3/skills`, `~/.code/skills`, `~/.codex/skills`, `~/.cursor/skills-cursor/`, `~/.gemini/skills`, `~/.gemini/antigravity/skills`, `~/.qwen/skills`
+Global targets come from the merged platform config:
+- built-in defaults from the CLI
+- plus any custom global platforms stored in `~/.toolai/config.yaml`
+
+Custom platforms are not available in project scope.
 
 ### `toolai link agents`
 
 Same interactive flow as `link skills`, but for agent `.md` files between your configured central agents location and agent directories.
 
 Targets mirror the skill targets (`.claude/agents`, `.codex/agents`, etc.).
+
+Project scope uses built-in platforms only. Global scope includes configured custom global platforms.
 
 ### `toolai centralize skills`
 
@@ -70,6 +150,12 @@ Publish skills from source repos into your configured central skills store.
 - publish, refresh, and install listing run natively in the CLI
 
 `Configured repos` uses the repo root stored in `toolai init` under `centralize.skills-dirs`.
+
+Example:
+
+```bash
+toolai centralize skills
+```
 
 Two modes:
 
@@ -105,13 +191,15 @@ pnpm test          # run vitest
 ```
 src/
 ├── commands/
+│   ├── config/platforms/     # toolai config platforms {list,add,remove}
 │   ├── link/skills.ts        # toolai link skills
 │   ├── link/agents.ts        # toolai link agents
-│   └── centralize/skills.ts  # toolai centralize skills
+│   ├── centralize/skills.ts  # toolai centralize skills
+│   └── init.ts               # toolai init
 └── lib/
     ├── adapters/             # skill & agent discovery/apply logic
     ├── centralize/           # inspect, naming, native engine, prompts, output
-    ├── config/               # paths, targets, rules
+    ├── config/               # toolai config parsing, platform prompts, targets
     ├── fs/                   # symlink ops, path helpers
     └── link/                 # shared link engine, prompts, theme
 ```
