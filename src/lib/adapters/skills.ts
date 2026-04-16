@@ -112,7 +112,7 @@ export function createSkillsAdapter(log: (line: string) => void) {
     async discoverItems(scope: Scope, operation: Operation): Promise<DiscoveredItem[]> {
       log(`discover skills ${scope} ${operation}`)
       const targetEntries = await getSkillTargets(scope)
-      const targetPaths = targetEntries.map(entry => resolvePath(entry.path))
+      const targetPaths = targetEntries.map(entry => resolvePath(entry.resolvedPath))
       const totalTargets = targetPaths.length || 1
 
       const {aliases, standalones} = await readSkillNames()
@@ -172,7 +172,7 @@ export function createSkillsAdapter(log: (line: string) => void) {
       const entries = (await getSkillTargets(scope)).map(entry => ({
         name: entry.label,
         path: entry.path,
-        resolved: resolvePath(entry.path)
+        resolved: resolvePath(entry.resolvedPath)
       }))
 
       const result: TargetEntry[] = []
@@ -201,12 +201,12 @@ export function createSkillsAdapter(log: (line: string) => void) {
       log(`apply skill changes ${scope} ${operation}`)
       const {aliases} = await readSkillNames()
       const bundleMembership = detectBundles(aliases)
-      const targetsByName = new Map<string, string>((await getSkillTargets(scope)).map(entry => [entry.label, entry.path]))
+      const targetsByName = new Map<string, string>((await getSkillTargets(scope)).map(entry => [entry.label, entry.resolvedPath]))
       const lines: string[] = []
       for (const targetName of selectedTargets) {
-        const relativePath = targetsByName.get(targetName)
-        if (!relativePath) continue
-        const resolvedTarget = resolvePath(relativePath)
+        const targetPath = targetsByName.get(targetName)
+        if (!targetPath) continue
+        const resolvedTarget = resolvePath(targetPath)
         for (const item of selectedItems) {
           const members = bundleMembership.get(item) ?? [item]
           for (const member of members) {

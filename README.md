@@ -126,6 +126,9 @@ Flow:
 4. **Select targets** — choose which agent directories to link into
 
 Project targets: `.claude/skills`, `.codex/skills`, `.gemini/skills`, `.cursor/skills`, `.agents/skills`, `.opencode/skills`, `.qwen/skills`
+Project scope is anchored to the directory where you run `toolai`. The built-in project target set is always shown, even before those platform folders exist, and targets are displayed relative to that current project directory (for example `.agents/skills`).
+If no items are available, or everything is already linked in `add` mode, the flow exits with a message instead of opening an empty checkbox prompt.
+Long item and target lists show a count plus arrow-key guidance when more entries are available than fit in the initial viewport.
 
 Global targets come from the merged platform config:
 - built-in defaults from the CLI
@@ -138,6 +141,9 @@ Custom platforms are not available in project scope.
 Same interactive flow as `link skills`, but for agent `.md` files between your configured central agents location and agent directories.
 
 Targets mirror the skill targets (`.claude/agents`, `.codex/agents`, etc.).
+Like `link skills`, the flow exits early with a message when there are no selectable items for the chosen scope and operation.
+Project-scope agent targets are also anchored to the directory where you run `toolai`, and the full built-in target set is available even before those folders exist on disk.
+Long lists also show arrow-key guidance when the prompt is scrollable.
 
 Project scope uses built-in platforms only. Global scope includes configured custom global platforms.
 
@@ -156,6 +162,8 @@ Example:
 ```bash
 toolai centralize skills
 ```
+
+Long interactive selection lists in this flow show a count plus arrow-key guidance when more choices are available off-screen.
 
 Two modes:
 
