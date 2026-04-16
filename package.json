@@ -1,6 +1,6 @@
 {
   "name": "toolai",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "private": true,
   "type": "module",
   "description": "Interactive CLI for local agent and skill management.",
@@ -17,7 +17,34 @@
     "bin": "toolai",
     "commands": "./dist/src/commands",
     "dirname": "toolai",
-    "topicSeparator": " "
+    "topicSeparator": " ",
+    "theme": {
+      "bin": "cyan",
+      "dollarSign": "cyan",
+      "version": "yellow",
+      "sectionHeader": "blueBright",
+      "sectionDescription": "dim",
+      "command": "greenBright",
+      "commandSummary": "white",
+      "topic": "magentaBright",
+      "flag": "cyanBright",
+      "flagSeparator": "gray",
+      "flagDefaultValue": "yellow",
+      "flagOptions": "magenta",
+      "flagRequired": "redBright"
+    },
+    "topics": {
+      "config": {
+        "name": "config",
+        "description": "Manage toolai configuration",
+        "subtopics": {
+          "platforms": {
+            "name": "platforms",
+            "description": "Manage custom global platforms"
+          }
+        }
+      }
+    }
   },
   "dependencies": {
     "@inquirer/prompts": "^8.3.2",
