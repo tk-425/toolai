@@ -4,7 +4,6 @@ import {promptForCustomPlatformLabel, promptForRequiredValue} from '../../../lib
 import {
   getStoredCustomPlatforms,
   getToolaiConfigPath,
-  mergePlatforms,
   writeStoredCustomPlatforms
 } from '../../../lib/config/toolai-config.js'
 import {getCancelMessage, PromptCancelled} from '../../../lib/link/prompts.js'
@@ -30,7 +29,7 @@ export default class ConfigPlatformsAdd extends Command {
         'Platform base path cannot be empty.'
       )
 
-      await writeStoredCustomPlatforms(mergePlatforms([...customPlatforms, {label, base}]), configPath)
+      await writeStoredCustomPlatforms([...customPlatforms, {label, base}], configPath)
       this.log(formatSuccess(`Saved custom platform "${label}" to ${configPath}`))
     } catch (error) {
       if (error instanceof PromptCancelled) {

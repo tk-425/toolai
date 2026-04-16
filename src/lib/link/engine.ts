@@ -8,7 +8,7 @@ interface RunLinkFlowOptions {
   promptForOperation: () => Promise<Operation>
   promptForMultiSelect: (
     message: string,
-    choices: Array<{name: string; value: string; description?: string}>
+    choices: Array<{name: string; value: string; description?: string; disabled?: boolean | string}>
   ) => Promise<string[]>
   render: (items: string[]) => void
 }
@@ -25,7 +25,7 @@ export async function runLinkFlow(options: RunLinkFlowOptions): Promise<string[]
         item.kind === 'bundle' ? formatBundleChoiceLabel(item.name) : item.name
       ),
       value: item.name,
-      disabled: item.marker === '[✓]' ? 'Already linked' : undefined,
+      disabled: operation === 'add' && item.marker === '[✓]' ? 'Already linked' : undefined,
       description: item.marker === '[-]' ? 'Partially linked' : undefined
     }))
   )

@@ -46,6 +46,10 @@ export const DEFAULT_PLATFORM_CONFIG: ToolaiPlatformConfig[] = [
 
 export const DEFAULT_PLATFORM_LABELS = new Set(DEFAULT_PLATFORM_CONFIG.map(platform => platform.label))
 
+function stripInlineComment(value: string): string {
+  return value.replace(/\s+#.*$/, '').trim()
+}
+
 export function mergePlatforms(platforms: ToolaiPlatformConfig[]): ToolaiPlatformConfig[] {
   const deduped = new Map<string, ToolaiPlatformConfig>()
   for (const platform of platforms) {
@@ -144,11 +148,11 @@ export async function readToolaiConfig(configPath = TOOLAI_CONFIG_PATH): Promise
 
     if (inPaths) {
       if (line.startsWith('skills-root:')) {
-        skillsRoot = line.slice('skills-root:'.length).trim()
+        skillsRoot = stripInlineComment(line.slice('skills-root:'.length))
         continue
       }
       if (line.startsWith('agents-root:')) {
-        agentsRoot = line.slice('agents-root:'.length).trim()
+        agentsRoot = stripInlineComment(line.slice('agents-root:'.length))
         continue
       }
     }
@@ -163,23 +167,27 @@ export async function readToolaiConfig(configPath = TOOLAI_CONFIG_PATH): Promise
           inSkillsDirs = false
           continue
         }
-        repoRoots.push(line.slice(2).trim())
+        repoRoots.push(stripInlineComment(line.slice(2)))
       }
     }
 
     if (inPlatforms) {
       if (line.startsWith('- label:')) {
         pushCurrentPlatform()
-        currentPlatform = {label: line.slice('- label:'.length).trim()}
+        currentPlatform = {label: stripInlineComment(line.slice('- label:'.length))}
         continue
       }
       if (line.startsWith('base:')) {
-        currentPlatform = {...currentPlatform, base: line.slice('base:'.length).trim()}
+        currentPlatform = {...currentPlatform, base: stripInlineComment(line.slice('base:'.length))}
       }
     }
   }
 
   pushCurrentPlatform()
+
+  if (repoRoots.length > 1) {
+    throw new ToolaiConfigError('toolai config supports only one centralize.skills-dirs entry. Keep a single source repo root.')
+  }
 
   return {
     skillsRoot,
@@ -235,7 +243,7 @@ export async function writeStoredCustomPlatforms(
   configPath = TOOLAI_CONFIG_PATH
 ): Promise<void> {
   const config = await requireToolaiConfig(configPath)
-  await writeToolaiConfig({...config, platforms: mergePlatforms(platforms)}, configPath)
+  await writeToolaiConfig({...config, platforms}, configPath)
 }
 
 export async function getConfiguredPlatforms(configPath = TOOLAI_CONFIG_PATH): Promise<ToolaiPlatformConfig[]> {
