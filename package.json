@@ -1,6 +1,6 @@
 {
   "name": "toolai",
-  "version": "0.1.15",
+  "version": "0.1.21",
   "private": true,
   "type": "module",
   "description": "Interactive CLI for local agent and skill management.",

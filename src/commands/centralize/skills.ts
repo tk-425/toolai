@@ -13,6 +13,7 @@ import {
   formatSyncSummary
 } from '../../lib/centralize/output.js'
 import {
+  inspectUpstreamStatus,
   listCentralizedInstalls,
   parsePublishPreview,
   pullLatest,
@@ -28,9 +29,9 @@ import {
   promptInput,
   promptSelect
 } from '../../lib/centralize/prompts.js'
-import {verifyConfigPresence} from '../../lib/centralize/verify.js'
+import {verifyConfigPresence, verifyInstallContentMatchesSource} from '../../lib/centralize/verify.js'
 import {getCancelMessage, PromptCancelled} from '../../lib/link/prompts.js'
-import {formatFieldLabel, formatPathValue, formatSectionLabel, formatSuccess, formatWarning} from '../../lib/link/theme.js'
+import {formatFieldLabel, formatFieldValue, formatPathValue, formatSectionLabel, formatSuccess, formatWarning} from '../../lib/link/theme.js'
 
 async function pathExists(candidate: string): Promise<boolean> {
   try {
@@ -121,6 +122,27 @@ function previewMatchesStoredConfig(
   )
 }
 
+function getContentChangedSkills(preview: NonNullable<ReturnType<typeof parsePublishPreview>>, diff: ReturnType<typeof diffSkills>): string[] {
+  return (preview.contentChangedSkills ?? []).filter(skill => !diff.added.includes(skill) && !diff.removed.includes(skill))
+}
+
+async function buildCentralizedPreview(input: {
+  selected: NonNullable<Awaited<ReturnType<typeof listCentralizedInstalls>>[number]>
+  storedConfig: NonNullable<Awaited<ReturnType<typeof readStoredCentralizeConfig>>>
+  usesLegacyRefreshCompat: boolean
+}): Promise<NonNullable<ReturnType<typeof parsePublishPreview>> | null> {
+  const preview = input.usesLegacyRefreshCompat
+    ? await runPublish(
+        resolvePath(input.selected.sourceRepo),
+        input.storedConfig.bundleName ?? input.selected.name,
+        input.storedConfig.prefix,
+        true
+      )
+    : await runRefresh(input.selected.installedRoot, true)
+
+  return parsePublishPreview(preview)
+}
+
 async function selectPrefix(command: Command, suggestedPrefix: string): Promise<string | undefined> {
   const choice = await promptSelect('What would you like to use for the prefix?', [
     {name: `Use suggested prefix: ${suggestedPrefix}`, value: 'suggested', description: 'recommended default'},
@@ -164,70 +186,51 @@ async function runUpdateFlow(command: Command): Promise<void> {
   if (!selected) return
 
   const sourceInspection = await inspectRepo(resolvePath(selected.sourceRepo)).catch(() => undefined)
+  if (sourceInspection?.isGitRepo && sourceInspection.hasWorkingTreeChanges) {
+    command.log(formatWarning('Source repo has local changes. Clean the repo before updating centralized skills.'))
+    return
+  }
+
   const storedConfig = await readStoredCentralizeConfig(selected.installedRoot).catch(() => null)
   const usesLegacyRefreshCompat = Boolean(storedConfig && !storedConfig.mode && storedConfig.installType)
-  const initialPreview = usesLegacyRefreshCompat
-    ? await runPublish(
-        resolvePath(selected.sourceRepo),
-        storedConfig?.bundleName ?? selected.name,
-        storedConfig?.prefix,
-        true
-      )
-    : await runRefresh(selected.installedRoot, true)
-  const initialParsedPreview = parsePublishPreview(initialPreview)
-  if (!initialParsedPreview || !storedConfig) {
-    printLines(command.log.bind(command), [
-      formatSectionLabel('Preview'),
-      initialPreview || '(no preview output)'
-    ])
-    command.log(formatWarning('Could not summarize the preview.'))
+  if (!storedConfig) {
+    command.log(formatWarning('Could not load the stored centralized install config.'))
+    return
+  }
+
+  if (sourceInspection?.isGitRepo) {
+    const upstreamStatus = await inspectUpstreamStatus(resolvePath(selected.sourceRepo))
+    if (upstreamStatus.state === 'no_upstream') {
+      command.log(formatWarning('Source repo has no upstream tracking branch. Using local source repo for preview.'))
+    } else if (upstreamStatus.state === 'check_failed') {
+      command.log(formatWarning(`Could not check remote updates for source repo. Using local source repo for preview. ${upstreamStatus.message ?? ''}`.trim()))
+    } else if (upstreamStatus.state === 'behind') {
+      command.log(formatSectionLabel('Source status'))
+      command.log(formatFieldValue(`Remote updates are available (${upstreamStatus.behindCount} commit${upstreamStatus.behindCount === 1 ? '' : 's'} behind).`))
+
+      const shouldPull = await promptConfirm('Pull latest changes from the source repo before previewing centralized changes?')
+      if (!shouldPull) return
+
+      const pullOutput = await pullLatest(resolvePath(selected.sourceRepo))
+      if (pullOutput) command.log(pullOutput)
+    } else if (upstreamStatus.state === 'up_to_date') {
+      command.log(formatSectionLabel('Source status'))
+      command.log(formatFieldValue('Source repo is already up to date with remote.'))
+    }
+  }
+
+  const finalPreview = await buildCentralizedPreview({selected, storedConfig, usesLegacyRefreshCompat})
+  if (!finalPreview) {
+    command.log(formatWarning('Could not summarize the centralized preview.'))
     return
   }
 
   const storedInstalledSkills = storedConfig.installedSkills ?? storedConfig.skills ?? []
-  const initialDiff = diffSkills(storedInstalledSkills, initialParsedPreview.installedSkills)
-  const noSkillChangesDetected = initialDiff.added.length === 0 && initialDiff.removed.length === 0
+  const diff = diffSkills(storedInstalledSkills, finalPreview.installedSkills)
+  const contentChangedSkills = getContentChangedSkills(finalPreview, diff)
+  printLines(command.log.bind(command), formatPreviewSummary(selected, finalPreview, diff))
 
-  printLines(command.log.bind(command), formatPreviewSummary(selected, initialParsedPreview, initialDiff))
-
-  let didPullLatest = false
-  if (sourceInspection?.isGitRepo) {
-    const shouldPull = await promptConfirm('Pull latest changes from the source repo first?', false)
-    if (shouldPull) {
-      const pullOutput = await pullLatest(resolvePath(selected.sourceRepo))
-      didPullLatest = Boolean(pullOutput) && !pullOutput.includes('Already up to date.')
-      if (didPullLatest) command.log(pullOutput)
-    }
-  }
-
-  let finalPreview = initialParsedPreview
-  let diff = initialDiff
-  if (didPullLatest) {
-    const preview = usesLegacyRefreshCompat
-      ? await runPublish(
-          resolvePath(selected.sourceRepo),
-          storedConfig.bundleName ?? selected.name,
-          storedConfig.prefix,
-          true
-        )
-      : await runRefresh(selected.installedRoot, true)
-    const refreshedPreview = parsePublishPreview(preview)
-    if (!refreshedPreview) {
-      printLines(command.log.bind(command), [
-        formatSectionLabel('Preview'),
-        preview || '(no preview output)'
-      ])
-      command.log(formatWarning('Could not summarize the preview after pull.'))
-      return
-    }
-
-    finalPreview = refreshedPreview
-    diff = diffSkills(storedInstalledSkills, finalPreview.installedSkills)
-    printLines(command.log.bind(command), formatPreviewSummary(selected, finalPreview, diff))
-  }
-
-  const noSkillChangesAfterRefresh = diff.added.length === 0 && diff.removed.length === 0
-  if (noSkillChangesAfterRefresh) {
+  if (diff.added.length === 0 && diff.removed.length === 0 && contentChangedSkills.length === 0) {
     command.log(formatSuccess('Source repo checked. Centralized install unchanged.'))
     return
   }
@@ -247,8 +250,12 @@ async function runUpdateFlow(command: Command): Promise<void> {
   }
   printLines(command.log.bind(command), formatSyncSummary(selected, finalPreview, diff))
 
-  const verification = await verifyConfigPresence([selected.installedRoot], pathExists)
-  command.log(verification.ok ? formatSuccess('Update verified.') : formatWarning(`Missing configs: ${verification.failures.join(', ')}`))
+  const verification = await verifyInstallContentMatchesSource(selected.installedRoot)
+  command.log(
+    verification.ok
+      ? formatSuccess('Centralized copy matches local source repo.')
+      : formatWarning(`Centralized copy does not match local source repo: ${verification.failures.join(', ')}`)
+  )
 }
 
 async function runAddFlow(command: Command): Promise<void> {
