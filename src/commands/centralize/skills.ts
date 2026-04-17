@@ -1,6 +1,7 @@
 import {Command} from '@oclif/core'
 import {lstat, readFile} from 'node:fs/promises'
 import path from 'node:path'
+import pc from 'picocolors'
 import {detectConflicts, getDefaultBundleName} from '../../lib/centralize/naming.js'
 import {discoverConfiguredRepos, inspectRepo, resolvePath} from '../../lib/centralize/inspect.js'
 import {
@@ -18,7 +19,7 @@ import {
   runPublish,
   runRefresh
 } from '../../lib/centralize/scripts.js'
-import {getConfiguredSkillsRoot} from '../../lib/config/toolai-config.js'
+import {getConfiguredCentralizeRepoRoot, getConfiguredSkillsRoot} from '../../lib/config/toolai-config.js'
 import {ToolaiConfigError} from '../../lib/config/toolai-config.js'
 import {
   buildModeChoices,
@@ -29,7 +30,7 @@ import {
 } from '../../lib/centralize/prompts.js'
 import {verifyConfigPresence} from '../../lib/centralize/verify.js'
 import {getCancelMessage, PromptCancelled} from '../../lib/link/prompts.js'
-import {formatSectionLabel, formatSuccess, formatWarning} from '../../lib/link/theme.js'
+import {formatFieldLabel, formatPathValue, formatSectionLabel, formatSuccess, formatWarning} from '../../lib/link/theme.js'
 
 async function pathExists(candidate: string): Promise<boolean> {
   try {
@@ -74,6 +75,34 @@ function normalizePrefix(prefix?: string): string {
   return prefix.endsWith('-') ? prefix : `${prefix}-`
 }
 
+function getSourceRepoDisplayPath(sourceRepo: string, configuredRepoRoot?: string): string {
+  if (!configuredRepoRoot) return sourceRepo
+
+  const resolvedSourceRepo = resolvePath(sourceRepo)
+  const resolvedRepoRoot = resolvePath(configuredRepoRoot)
+  const relativeSourceRepo = path.relative(resolvedRepoRoot, resolvedSourceRepo)
+
+  if (!relativeSourceRepo || relativeSourceRepo.startsWith('..') || path.isAbsolute(relativeSourceRepo)) {
+    return sourceRepo
+  }
+
+  return `/${relativeSourceRepo.split(path.sep).join('/')}`
+}
+
+function formatCentralizedInstallChoice(input: {
+  kind: 'bundle' | 'standalone'
+  name: string
+  prefix: string
+  sourceRepo: string
+  configuredRepoRoot?: string
+}): string {
+  const kindLabel = input.kind === 'bundle' ? pc.cyan('[Bundle]') : pc.yellow('[Standalone]')
+  const nameLabel = pc.bold(input.name)
+  const prefixLabel = `prefix: "${input.prefix || ''}"`
+  const sourceRepoLabel = formatPathValue(getSourceRepoDisplayPath(input.sourceRepo, input.configuredRepoRoot))
+  return `${kindLabel} ${nameLabel} ${pc.dim(prefixLabel)} ${sourceRepoLabel}`
+}
+
 function previewMatchesStoredConfig(
   preview: ReturnType<typeof parsePublishPreview>,
   storedConfig: Awaited<ReturnType<typeof readStoredCentralizeConfig>>
@@ -115,10 +144,18 @@ async function runUpdateFlow(command: Command): Promise<void> {
     return
   }
 
+  let configuredRepoRoot: string | undefined
+  try {
+    configuredRepoRoot = resolvePath(await getConfiguredCentralizeRepoRoot())
+    command.log(`${formatFieldLabel('Default')} ${formatPathValue(configuredRepoRoot)}`)
+  } catch (error) {
+    if (!(error instanceof ToolaiConfigError)) throw error
+  }
+
   const selectedRoot = await promptSelect(
     'Which centralized install would you like to update?',
     installs.map(install => ({
-      name: `${install.kind === 'bundle' ? '[Bundle]' : '[Standalone]'} ${install.name} ${install.prefix ? `prefix: "${install.prefix}"` : 'prefix: ""'} ${install.sourceRepo}`,
+      name: formatCentralizedInstallChoice({...install, configuredRepoRoot}),
       value: install.installedRoot
     }))
   )
