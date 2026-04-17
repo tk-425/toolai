@@ -3,6 +3,8 @@ import path, {basename, join, relative} from 'node:path'
 import {getConfiguredSkillsRoot} from '../config/toolai-config.js'
 import {resolvePath} from '../fs/path-helpers.js'
 import type {CentralizedInstall} from './types.js'
+import {discoverSkillDirs} from './discovery.js'
+import {directoriesDiffer} from './verify.js'
 
 export interface PublishPreview {
   mode: 'multi-skill-bundle-with-symlinks' | 'single-skill-direct-install'
@@ -11,6 +13,7 @@ export interface PublishPreview {
   prefix: string
   discoveredSkills: string[]
   installedSkills: string[]
+  contentChangedSkills: string[]
   publishedTo: string
 }
 
@@ -33,8 +36,6 @@ interface StoredInstallConfig {
   installedSkills?: string[]
 }
 
-const EXCLUDED_SEGMENTS = new Set(['.git', 'node_modules', '.venv', 'dist', 'build', '.next', '.turbo', 'coverage'])
-
 async function getCentralRoot(options?: EngineOptions): Promise<string> {
   return resolvePath(options?.centralRoot ?? await getConfiguredSkillsRoot())
 }
@@ -56,56 +57,6 @@ async function pathInfo(candidate: string) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
     throw error
   }
-}
-
-async function hasSkillFile(dir: string): Promise<boolean> {
-  const info = await pathInfo(join(dir, 'SKILL.md'))
-  return Boolean(info?.isFile())
-}
-
-function hasExcludedSegment(repoPath: string, targetPath: string): boolean {
-  return relative(repoPath, targetPath)
-    .split(path.sep)
-    .some(segment => EXCLUDED_SEGMENTS.has(segment))
-}
-
-async function collectSkillDirs(repoPath: string, currentPath: string, skills: string[]): Promise<void> {
-  const entries = await readdir(currentPath, {withFileTypes: true})
-
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue
-
-    const fullPath = join(currentPath, entry.name)
-    if (hasExcludedSegment(repoPath, fullPath)) continue
-
-    if (await hasSkillFile(fullPath)) {
-      skills.push(fullPath)
-      continue
-    }
-
-    await collectSkillDirs(repoPath, fullPath, skills)
-  }
-}
-
-async function discoverSkillDirs(sourceRepo: string): Promise<string[]> {
-  const rootHasSkill = await hasSkillFile(sourceRepo)
-  const nestedSkills: string[] = []
-  await collectSkillDirs(sourceRepo, sourceRepo, nestedSkills)
-
-  let skillDirs = rootHasSkill ? [sourceRepo] : nestedSkills
-  const preferredRoot = join(sourceRepo, 'skills')
-  const preferred = skillDirs.filter(dir => dir.startsWith(`${preferredRoot}${path.sep}`))
-  if (preferred.length > 0) skillDirs = preferred
-
-  const topLevelCount = skillDirs.filter(dir => !relative(sourceRepo, dir).includes(path.sep)).length
-  const nestedCount = skillDirs.length - topLevelCount
-  if (topLevelCount > 0 && nestedCount > 0) {
-    throw new Error('ambiguous discovery: found both top-level and nested skill directories')
-  }
-
-  const deduped = [...new Set(skillDirs)].sort()
-  if (deduped.length === 0) throw new Error('no valid skills discovered')
-  return deduped
 }
 
 async function copyDirAtomic(src: string, dest: string): Promise<void> {
@@ -244,6 +195,7 @@ export async function publishSkills(
     const targetInfo = await pathInfo(targetDir)
     if (targetInfo?.isSymbolicLink()) throw new Error(`conflicting target paths exist: ${targetDir}`)
     if (targetInfo && !targetInfo.isDirectory()) throw new Error(`conflicting target paths exist: ${targetDir}`)
+    const contentChangedSkills = await directoriesDiffer(discoveredDirs[0], targetDir) ? [installedSkills[0]] : []
 
     if (!dryRun) {
       await copyDirAtomic(discoveredDirs[0], targetDir)
@@ -265,6 +217,7 @@ export async function publishSkills(
       prefix: normalizedPrefix,
       discoveredSkills,
       installedSkills,
+      contentChangedSkills,
       publishedTo: targetDir
     }
   }
@@ -280,17 +233,25 @@ export async function publishSkills(
     if (info && !info.isSymbolicLink()) throw new Error(`conflicting target paths exist: ${aliasPath}`)
   }
 
+  const changedFlags = await Promise.all(
+    discoveredDirs.map(async (discoveredDir, index) =>
+      directoriesDiffer(discoveredDir, join(bundleDir, installedSkills[index]))
+    )
+  )
+  const contentChangedSkills = installedSkills.filter((_, index) => changedFlags[index])
+
   if (!dryRun) {
-    await mkdir(bundleDir, {recursive: true})
     if (previousConfig?.installedSkills) {
       await removeOwnedBundleAliases({
         centralRoot,
         bundleDir,
         bundleName: resolvedBundleName,
         previousInstalledSkills: previousConfig.installedSkills,
-        nextInstalledSkills: installedSkills
+        nextInstalledSkills: []
       })
     }
+    await rm(bundleDir, {recursive: true, force: true})
+    await mkdir(bundleDir, {recursive: true})
   }
 
   for (let index = 0; index < discoveredDirs.length; index++) {
@@ -326,6 +287,7 @@ export async function publishSkills(
     prefix: normalizedPrefix,
     discoveredSkills,
     installedSkills,
+    contentChangedSkills,
     publishedTo: bundleDir
   }
 }

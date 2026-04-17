@@ -14,6 +14,10 @@ function formatListSection(label: string, values: string[]): string[] {
   return [formatFieldLabel(label.replace(/:$/, '')), ...values.map(value => `- ${value}`)]
 }
 
+function getContentChangedSkills(preview: PublishPreview, diff: SkillDiff): string[] {
+  return (preview.contentChangedSkills ?? []).filter(skill => !diff.added.includes(skill) && !diff.removed.includes(skill))
+}
+
 function formatRow(label: string, value: string, kind: 'default' | 'path' = 'default'): string {
   const formattedValue = kind === 'path' ? formatPathValue(value) : formatFieldValue(value)
   return `${formatFieldLabel(label)} ${formattedValue}`
@@ -52,6 +56,7 @@ export function formatPublishPlanSummary(input: {
 }
 
 export function formatPreviewSummary(selected: CentralizedInstall, preview: PublishPreview, diff: SkillDiff): string[] {
+  const contentChangedSkills = getContentChangedSkills(preview, diff)
   const lines = [
     formatSectionLabel('Preview'),
     formatRow('Install', selected.name),
@@ -63,7 +68,7 @@ export function formatPreviewSummary(selected: CentralizedInstall, preview: Publ
   ]
 
   if (selected.kind === 'bundle') lines.push(formatRow('Symlinks', String(preview.installedSkills.length)))
-  if (diff.added.length === 0 && diff.removed.length === 0) {
+  if (diff.added.length === 0 && diff.removed.length === 0 && contentChangedSkills.length === 0) {
     lines.push(formatFieldValue('No skill changes detected.'))
     return lines
   }
@@ -71,11 +76,13 @@ export function formatPreviewSummary(selected: CentralizedInstall, preview: Publ
   return [
     ...lines,
     ...formatListSection('Added skills:', diff.added),
-    ...formatListSection('Removed skills:', diff.removed)
+    ...formatListSection('Removed skills:', diff.removed),
+    ...formatListSection('Updated skills:', contentChangedSkills)
   ]
 }
 
 export function formatSyncSummary(selected: CentralizedInstall, preview: PublishPreview, diff: SkillDiff): string[] {
+  const contentChangedSkills = getContentChangedSkills(preview, diff)
   return [
     formatSectionLabel('Sync complete'),
     formatRow('Install', selected.name),
@@ -84,7 +91,8 @@ export function formatSyncSummary(selected: CentralizedInstall, preview: Publish
     formatRow('Skills', String(preview.installedSkills.length)),
     ...(selected.kind === 'bundle' ? [formatRow('Symlinks', String(preview.installedSkills.length))] : []),
     ...formatListSection('Added skills:', diff.added),
-    ...formatListSection('Removed skills:', diff.removed)
+    ...formatListSection('Removed skills:', diff.removed),
+    ...formatListSection('Updated skills:', contentChangedSkills)
   ]
 }
 
