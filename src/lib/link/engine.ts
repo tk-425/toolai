@@ -46,7 +46,34 @@ export async function runLinkFlow(options: RunLinkFlowOptions): Promise<string[]
     itemChoices
   )
 
-  const targets = await options.adapter.discoverTargets(scope, operation, selectedItems)
+  const expandedItems: string[] = []
+  const itemsByName = new Map(items.map(item => [item.name, item]))
+
+  for (const itemName of selectedItems) {
+    const item = itemsByName.get(itemName)
+    if (item?.kind === 'bundle' && item.members) {
+      const memberChoices = [
+        {name: 'All', value: '__all__'},
+        ...item.members.map(member => ({
+          name: member,
+          value: member
+        }))
+      ]
+      const selectedMembers = await options.promptForMultiSelect(
+        `Select members from ${itemName}`,
+        memberChoices
+      )
+      if (selectedMembers.includes('__all__')) {
+        expandedItems.push(...item.members)
+      } else {
+        expandedItems.push(...selectedMembers)
+      }
+    } else {
+      expandedItems.push(itemName)
+    }
+  }
+
+  const targets = await options.adapter.discoverTargets(scope, operation, expandedItems)
   if (targets.length === 0) {
     options.render([
       'No targets available for the selected scope. If you chose project scope, run this command from the project root or choose global.'
@@ -68,7 +95,7 @@ export async function runLinkFlow(options: RunLinkFlowOptions): Promise<string[]
     ? targets.map(target => target.name)
     : selectedTargetValues
 
-  const summary = await options.adapter.apply(scope, operation, selectedItems, selectedTargets)
+  const summary = await options.adapter.apply(scope, operation, expandedItems, selectedTargets)
   options.render(summary.map(formatSummaryLine))
   return summary
 }
