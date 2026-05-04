@@ -1,5 +1,6 @@
 import {lstat, readdir} from 'node:fs/promises'
 import path, {join, relative} from 'node:path'
+import {getIgnoredPrefixes, isIgnored} from './gitignore.js'
 
 const EXCLUDED_SEGMENTS = new Set(['.git', 'node_modules', '.venv', 'dist', 'build', '.next', '.turbo', 'coverage'])
 
@@ -23,7 +24,12 @@ function hasExcludedSegment(repoPath: string, targetPath: string): boolean {
     .some(segment => EXCLUDED_SEGMENTS.has(segment))
 }
 
-async function collectSkillDirs(repoPath: string, currentPath: string, skills: string[]): Promise<void> {
+async function collectSkillDirs(
+  repoPath: string,
+  currentPath: string,
+  skills: string[],
+  ignoredPrefixes: Set<string>
+): Promise<void> {
   const entries = await readdir(currentPath, {withFileTypes: true})
 
   for (const entry of entries) {
@@ -31,20 +37,22 @@ async function collectSkillDirs(repoPath: string, currentPath: string, skills: s
 
     const fullPath = join(currentPath, entry.name)
     if (hasExcludedSegment(repoPath, fullPath)) continue
+    if (isIgnored(repoPath, fullPath, ignoredPrefixes)) continue
 
     if (await hasSkillFile(fullPath)) {
       skills.push(fullPath)
       continue
     }
 
-    await collectSkillDirs(repoPath, fullPath, skills)
+    await collectSkillDirs(repoPath, fullPath, skills, ignoredPrefixes)
   }
 }
 
 export async function discoverSkillDirs(sourceRepo: string): Promise<string[]> {
+  const ignoredPrefixes = await getIgnoredPrefixes(sourceRepo)
   const rootHasSkill = await hasSkillFile(sourceRepo)
   const nestedSkills: string[] = []
-  await collectSkillDirs(sourceRepo, sourceRepo, nestedSkills)
+  await collectSkillDirs(sourceRepo, sourceRepo, nestedSkills, ignoredPrefixes)
 
   let skillDirs = rootHasSkill ? [sourceRepo] : nestedSkills
   const preferredRoot = join(sourceRepo, 'skills')

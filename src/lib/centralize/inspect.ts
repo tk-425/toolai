@@ -5,6 +5,7 @@ import {promisify} from 'node:util'
 import {TOOLAI_CONFIG_PATH} from '../config/paths.js'
 import {getConfiguredCentralizeRepoRoot} from '../config/toolai-config.js'
 import {resolvePath} from '../fs/path-helpers.js'
+import {getIgnoredPrefixes, isIgnored} from './gitignore.js'
 import type {CentralizedInstall, DiscoveredSkill, RepoInspection, RepoLayout} from './types.js'
 
 const execFileAsync = promisify(execFile)
@@ -27,7 +28,12 @@ function hasExcludedSegment(repoPath: string, targetPath: string): boolean {
     .some(segment => EXCLUDED_SEGMENTS.has(segment))
 }
 
-async function collectNestedSkills(repoPath: string, currentPath: string, skills: DiscoveredSkill[]): Promise<void> {
+async function collectNestedSkills(
+  repoPath: string,
+  currentPath: string,
+  skills: DiscoveredSkill[],
+  ignoredPrefixes: Set<string>
+): Promise<void> {
   const entries = await readdir(currentPath, {withFileTypes: true})
 
   for (const entry of entries) {
@@ -35,13 +41,14 @@ async function collectNestedSkills(repoPath: string, currentPath: string, skills
 
     const fullPath = join(currentPath, entry.name)
     if (hasExcludedSegment(repoPath, fullPath)) continue
+    if (isIgnored(repoPath, fullPath, ignoredPrefixes)) continue
 
     if (await hasSkillFile(fullPath)) {
       skills.push({name: basename(fullPath), path: fullPath, isRoot: false})
       continue
     }
 
-    await collectNestedSkills(repoPath, fullPath, skills)
+    await collectNestedSkills(repoPath, fullPath, skills, ignoredPrefixes)
   }
 }
 
@@ -121,12 +128,13 @@ export async function readCentralizedConfig(installRoot: string): Promise<Centra
 }
 
 export async function inspectRepo(repoPath: string): Promise<RepoInspection> {
+  const ignoredPrefixes = await getIgnoredPrefixes(repoPath)
   const rootSkill = (await hasSkillFile(repoPath))
     ? {name: basename(repoPath), path: repoPath, isRoot: true}
     : null
 
   const nestedSkills: DiscoveredSkill[] = []
-  await collectNestedSkills(repoPath, repoPath, nestedSkills)
+  await collectNestedSkills(repoPath, repoPath, nestedSkills, ignoredPrefixes)
 
   let layout: RepoLayout = 'none'
   if (rootSkill && nestedSkills.length > 0) layout = 'mixed-layout'
