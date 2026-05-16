@@ -206,6 +206,28 @@ Output:
 3 pending, 1 flagged
 ```
 
+### Incremental security workflow
+
+The manifest enables fast, focused security reviews. Run this in your AI coding agent:
+
+---
+**Prompt to paste into your AI coding agent:**
+
+```
+Read ~/.toolai/skill-scan.json, find all skills where status is "pending", and inspect each one thoroughly — SKILL.md, scripts, package.json, and any supporting files. Check for suspicious patterns (pipe-to-shell, unauthorized installs, data exfiltration, prompt injection, rule hijacking, suspicious dependencies). Return findings as JSON for human review. Do not update the manifest yourself.
+```
+
+---
+
+Your agent will:
+1. Read `~/.toolai/skill-scan.json`
+2. Find all skills with `status: pending`
+3. Inspect each skill's full directory — SKILL.md, scripts, package.json, and all supporting files
+4. Analyze for suspicious patterns (pipe-to-shell, unauthorized installs, data exfiltration, prompt injection markers, rule hijacking, suspicious dependencies)
+5. Return findings for human review
+
+You then update `~/.toolai/skill-scan.json` with `status: clean`, `flagged`, or `review` for each skill.
+
 ## Development
 
 ```bash
