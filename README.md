@@ -189,7 +189,7 @@ Bundle refreshes prune removed source skills from both the bundle directory and 
 
 Show skills with pending or flagged scan status. Displays entries from `~/.toolai/skill-scan.json` where status is `pending` or `flagged`.
 
-If the manifest does not exist, it bootstraps from `~/.agent-tools/skills`, computing hashes for all installed skills and setting them to `pending`.
+If the manifest does not exist, it reads the skills directory from ~/.toolai/config.yaml, computes hashes for all installed skills, and sets them to `pending`.
 
 Example:
 
