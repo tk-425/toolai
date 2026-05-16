@@ -1,6 +1,6 @@
 {
   "name": "toolai",
-  "version": "0.1.22",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "description": "Interactive CLI for local agent and skill management.",
@@ -9,7 +9,6 @@
     "dev": "tsx src/index.ts",
     "test": "vitest run"
   },
-  "packageManager": "pnpm@10.33.0",
   "bin": {
     "toolai": "./bin/run.js"
   },
