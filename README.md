@@ -23,7 +23,7 @@ Instead of manually copying or symlinking files per-agent, you get an interactiv
 ```bash
 pnpm install
 pnpm build
-pnpm link --global
+pnpm add -g .
 ```
 
 After linking, the `toolai` command is available globally.
@@ -185,6 +185,27 @@ Two modes:
 
 Bundle refreshes prune removed source skills from both the bundle directory and their top-level alias symlinks, but only for members owned by that install.
 
+### `toolai security status`
+
+Show skills with pending or flagged scan status. Displays entries from `~/.toolai/skill-scan.json` where status is `pending` or `flagged`.
+
+If the manifest does not exist, it bootstraps from `~/.agent-tools/skills`, computing hashes for all installed skills and setting them to `pending`.
+
+Example:
+
+```bash
+toolai security status
+```
+
+Output:
+
+```
+[pending] anthropic — last updated 2026-05-16T01:18:50.186Z
+[flagged] claude-setup — last updated 2026-05-16T01:18:50.193Z
+
+3 pending, 1 flagged
+```
+
 ## Development
 
 ```bash
@@ -203,13 +224,15 @@ src/
 │   ├── link/skills.ts        # toolai link skills
 │   ├── link/agents.ts        # toolai link agents
 │   ├── centralize/skills.ts  # toolai centralize skills
+│   ├── security/status.ts     # toolai security status
 │   └── init.ts               # toolai init
 └── lib/
+    ├── security/              # skill manifest and hash computation
     ├── adapters/             # skill & agent discovery/apply logic
     ├── centralize/           # inspect, naming, native engine, prompts, output
-    ├── config/               # toolai config parsing, platform prompts, targets
-    ├── fs/                   # symlink ops, path helpers
-    └── link/                 # shared link engine, prompts, theme
+    ├── config/                # toolai config parsing, platform prompts, targets
+    ├── fs/                    # symlink ops, path helpers
+    └── link/                  # shared link engine, prompts, theme
 ```
 
 ## Graceful cancellation
