@@ -18,6 +18,7 @@ docs/superpowers/
 .qwen/
 .cursor/
 .mcp.json
+opencode.json
 CLAUDE.md
 GEMINI.md
 QWEN.md
