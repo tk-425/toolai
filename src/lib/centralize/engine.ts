@@ -2,6 +2,7 @@ import {cp, lstat, mkdir, readFile, readdir, readlink, rename, rm, symlink, writ
 import path, {basename, join, relative} from 'node:path'
 import {getConfiguredSkillsRoot} from '../config/toolai-config.js'
 import {resolvePath} from '../fs/path-helpers.js'
+import {SkillManifest, getSkillManifestPath} from '../security/index.js'
 import type {CentralizedInstall} from './types.js'
 import {discoverSkillDirs} from './discovery.js'
 import {directoriesDiffer} from './verify.js'
@@ -48,6 +49,15 @@ function normalizePrefix(prefix?: string): string {
 function prefixedName(prefix: string, name: string): string {
   if (!prefix) return name
   return name.startsWith(prefix) ? name : `${prefix}${name}`
+}
+
+let _manifest: SkillManifest | null = null
+
+function getManifest(): SkillManifest {
+  if (!_manifest) {
+    _manifest = new SkillManifest(resolvePath(getSkillManifestPath()))
+  }
+  return _manifest
 }
 
 async function pathInfo(candidate: string) {
@@ -135,12 +145,17 @@ async function removeOwnedBundleAliases(input: {
 
     const aliasPath = join(input.centralRoot, installedName)
     const info = await pathInfo(aliasPath)
-    if (!info?.isSymbolicLink()) continue
+    if (!info?.isSymbolicLink()) {
+      await getManifest().removeSkill(installedName)
+      continue
+    }
 
     const linkTarget = await readlink(aliasPath)
-    if (linkTarget === `${input.bundleName}/${installedName}`) {
+    const isOwnedAlias = linkTarget === `${input.bundleName}/${installedName}`
+    if (isOwnedAlias) {
       await rm(aliasPath, {force: true})
     }
+    await getManifest().removeSkill(installedName)
   }
 }
 
@@ -208,6 +223,12 @@ export async function publishSkills(
         discoveredSkills,
         installedSkills
       }))
+      const manifest = getManifest()
+      for (const installedName of installedSkills) {
+        const skillPath = targetDir
+        const hash = await manifest.computeHash(skillPath)
+        await manifest.addOrUpdateSkill(installedName, hash, new Date().toISOString(), skillPath)
+      }
     }
 
     return {
@@ -278,6 +299,11 @@ export async function publishSkills(
       discoveredSkills,
       installedSkills
     }))
+    const manifest = getManifest()
+    for (const installedName of installedSkills) {
+      const hash = await manifest.computeHash(join(bundleDir, installedName))
+      await manifest.addOrUpdateSkill(installedName, hash, new Date().toISOString())
+    }
   }
 
   return {
