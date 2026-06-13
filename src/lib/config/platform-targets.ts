@@ -13,9 +13,11 @@ const PROJECT_PLATFORM_ROOTS = new Map([
   ['Codex', '.codex'],
   ['Gemini', '.gemini'],
   ['Cursor', '.cursor'],
-  ['Antigravity', '.agents'],
+  ['Agents', '.agents'],
   ['OpenCode', '.opencode'],
-  ['Qwen', '.qwen']
+  ['Qwen', '.qwen'],
+  ['Pi', '.pi'],
+  ['OMP', '.omp']
 ])
 
 export async function buildPlatformTargets(

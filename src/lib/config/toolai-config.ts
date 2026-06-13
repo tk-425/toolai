@@ -39,9 +39,11 @@ export const DEFAULT_PLATFORM_CONFIG: ToolaiPlatformConfig[] = [
   {label: 'Codex', base: '~/.codex'},
   {label: 'Gemini', base: '~/.gemini'},
   {label: 'Cursor', base: '~/.cursor'},
-  {label: 'Antigravity', base: '~/.agents'},
+  {label: 'Agents', base: '~/.agents'},
   {label: 'OpenCode', base: '~/.opencode'},
-  {label: 'Qwen', base: '~/.qwen'}
+  {label: 'Qwen', base: '~/.qwen'},
+  {label: 'Pi', base: '~/.pi'},
+  {label: 'OMP', base: '~/.omp'}
 ]
 
 export const DEFAULT_PLATFORM_LABELS = new Set(DEFAULT_PLATFORM_CONFIG.map(platform => platform.label))
