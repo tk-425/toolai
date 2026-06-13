@@ -34,7 +34,7 @@ After linking, the `toolai` command is available globally.
 
 `toolai` treats platforms in two groups:
 
-- **Built-in platforms** — Claude Code, Codex, Gemini, Cursor, Antigravity, OpenCode, and Qwen
+- **Built-in platforms** — Claude Code, Codex, Gemini, Cursor, Agents, OpenCode, Qwen, Pi, and OMP
 - **Custom global platforms** — user-managed entries stored in `~/.toolai/config.yaml`
 
 Scope rules:
@@ -63,9 +63,11 @@ Built-in platforms remain managed by the CLI defaults:
 - Codex
 - Gemini
 - Cursor
-- Antigravity
+- Agents
 - OpenCode
 - Qwen
+- Pi
+- OMP
 
 Custom global platforms are stored in `~/.toolai/config.yaml` and layered on top of those defaults.
 
@@ -125,7 +127,7 @@ Flow:
 3. **Select items** — checkbox selection with `space` to toggle, `enter` to confirm. Bundles appear as single rows (e.g., `expo (bundle)`)
 4. **Select targets** — choose which agent directories to link into
 
-Project targets: `.claude/skills`, `.codex/skills`, `.gemini/skills`, `.cursor/skills`, `.agents/skills`, `.opencode/skills`, `.qwen/skills`
+Project targets: `.claude/skills`, `.codex/skills`, `.gemini/skills`, `.cursor/skills`, `.agents/skills`, `.opencode/skills`, `.qwen/skills`, `.pi/skills`, `.omp/skills`
 Project scope is anchored to the directory where you run `toolai`. The built-in project target set is always shown, even before those platform folders exist, and targets are displayed relative to that current project directory (for example `.agents/skills`).
 If no items are available, or everything is already linked in `add` mode, the flow exits with a message instead of opening an empty checkbox prompt.
 Long item and target lists show a count plus arrow-key guidance when more entries are available than fit in the initial viewport.
