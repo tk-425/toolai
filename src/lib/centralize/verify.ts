@@ -1,8 +1,8 @@
 import {createHash} from 'node:crypto'
 import {lstat, readFile, readdir, readlink} from 'node:fs/promises'
-import path, {basename, join} from 'node:path'
+import path, {join} from 'node:path'
 import type {VerificationResult} from './types.js'
-import {discoverSkillDirs} from './discovery.js'
+import {discoverSkills} from './discovery.js'
 
 interface StoredInstallConfig {
   mode?: 'multi-skill-bundle-with-symlinks' | 'single-skill-direct-install'
@@ -104,8 +104,8 @@ export async function verifyInstallContentMatchesSource(installRoot: string): Pr
   const config = await readStoredInstallConfig(installRoot)
   const discoveredSkills = config.discoveredSkills ?? []
   const installedSkills = config.installedSkills ?? []
-  const sourceSkillDirs = await discoverSkillDirs(config.sourceRepo)
-  const sourceSkillMap = new Map(sourceSkillDirs.map(dir => [basename(dir), dir]))
+  const sourceSkills = await discoverSkills(config.sourceRepo)
+  const sourceSkillMap = new Map(sourceSkills.map(skill => [skill.name, skill.path]))
   const failures: string[] = []
   const checkedPaths: string[] = []
   const mode = config.mode ?? config.installType

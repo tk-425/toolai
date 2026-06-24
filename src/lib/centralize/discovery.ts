@@ -1,22 +1,10 @@
-import {lstat, readdir} from 'node:fs/promises'
+import {readdir} from 'node:fs/promises'
 import path, {join, relative} from 'node:path'
 import {getIgnoredPrefixes, isIgnored} from './gitignore.js'
+import {readSkillMetadata} from './skill-metadata.js'
+import type {DiscoveredSkill} from './types.js'
 
 const EXCLUDED_SEGMENTS = new Set(['.git', 'node_modules', '.venv', 'dist', 'build', '.next', '.turbo', 'coverage'])
-
-async function pathInfo(candidate: string) {
-  try {
-    return await lstat(candidate)
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
-    throw error
-  }
-}
-
-async function hasSkillFile(dir: string): Promise<boolean> {
-  const info = await pathInfo(join(dir, 'SKILL.md'))
-  return Boolean(info?.isFile())
-}
 
 function hasExcludedSegment(repoPath: string, targetPath: string): boolean {
   return relative(repoPath, targetPath)
@@ -24,10 +12,10 @@ function hasExcludedSegment(repoPath: string, targetPath: string): boolean {
     .some(segment => EXCLUDED_SEGMENTS.has(segment))
 }
 
-async function collectSkillDirs(
+async function collectSkills(
   repoPath: string,
   currentPath: string,
-  skills: string[],
+  skills: DiscoveredSkill[],
   ignoredPrefixes: Set<string>
 ): Promise<void> {
   const entries = await readdir(currentPath, {withFileTypes: true})
@@ -39,33 +27,36 @@ async function collectSkillDirs(
     if (hasExcludedSegment(repoPath, fullPath)) continue
     if (isIgnored(repoPath, fullPath, ignoredPrefixes)) continue
 
-    if (await hasSkillFile(fullPath)) {
-      skills.push(fullPath)
+    const skill = await readSkillMetadata(fullPath, false)
+    if (skill) {
+      skills.push(skill)
       continue
     }
 
-    await collectSkillDirs(repoPath, fullPath, skills, ignoredPrefixes)
+    await collectSkills(repoPath, fullPath, skills, ignoredPrefixes)
   }
 }
 
-export async function discoverSkillDirs(sourceRepo: string): Promise<string[]> {
+export async function discoverSkills(sourceRepo: string): Promise<DiscoveredSkill[]> {
   const ignoredPrefixes = await getIgnoredPrefixes(sourceRepo)
-  const rootHasSkill = await hasSkillFile(sourceRepo)
-  const nestedSkills: string[] = []
-  await collectSkillDirs(sourceRepo, sourceRepo, nestedSkills, ignoredPrefixes)
+  const rootSkill = await readSkillMetadata(sourceRepo, true)
+  const nestedSkills: DiscoveredSkill[] = []
+  await collectSkills(sourceRepo, sourceRepo, nestedSkills, ignoredPrefixes)
 
-  let skillDirs = rootHasSkill ? [sourceRepo] : nestedSkills
+  let skills = rootSkill ? [rootSkill] : nestedSkills
   const preferredRoot = join(sourceRepo, 'skills')
-  const preferred = skillDirs.filter(dir => dir.startsWith(`${preferredRoot}${path.sep}`))
-  if (preferred.length > 0) skillDirs = preferred
+  const preferred = skills.filter(skill => skill.path.startsWith(`${preferredRoot}${path.sep}`))
+  if (preferred.length > 0) skills = preferred
 
-  const topLevelCount = skillDirs.filter(dir => !relative(sourceRepo, dir).includes(path.sep)).length
-  const nestedCount = skillDirs.length - topLevelCount
+  const topLevelCount = skills.filter(skill => !relative(sourceRepo, skill.path).includes(path.sep)).length
+  const nestedCount = skills.length - topLevelCount
   if (topLevelCount > 0 && nestedCount > 0) {
     throw new Error('ambiguous discovery: found both top-level and nested skill directories')
   }
 
-  const deduped = [...new Set(skillDirs)].sort()
+  const deduped = [...new Map(skills.map(skill => [skill.path, skill])).values()]
+    .sort((a, b) => a.path.localeCompare(b.path))
   if (deduped.length === 0) throw new Error('no valid skills discovered')
   return deduped
 }
+
