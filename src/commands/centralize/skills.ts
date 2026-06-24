@@ -3,6 +3,7 @@ import {lstat, readFile} from 'node:fs/promises'
 import path from 'node:path'
 import pc from 'picocolors'
 import {detectConflicts, getDefaultBundleName} from '../../lib/centralize/naming.js'
+import {resolveCentralizedSourceRepo} from '../../lib/centralize/engine.js'
 import {discoverConfiguredRepos, inspectRepo, resolvePath} from '../../lib/centralize/inspect.js'
 import {
   diffSkills,
@@ -133,7 +134,7 @@ async function buildCentralizedPreview(input: {
 }): Promise<NonNullable<ReturnType<typeof parsePublishPreview>> | null> {
   const preview = input.usesLegacyRefreshCompat
     ? await runPublish(
-        resolvePath(input.selected.sourceRepo),
+        input.selected.sourceRepo,
         input.storedConfig.bundleName ?? input.selected.name,
         input.storedConfig.prefix,
         true
@@ -185,7 +186,10 @@ async function runUpdateFlow(command: Command): Promise<void> {
   const selected = installs.find(install => install.installedRoot === selectedRoot)
   if (!selected) return
 
-  const sourceInspection = await inspectRepo(resolvePath(selected.sourceRepo)).catch(() => undefined)
+  const resolvedSourceRepo = await resolveCentralizedSourceRepo(selected.installedRoot).catch(() => resolvePath(selected.sourceRepo))
+  const selectedInstall = {...selected, sourceRepo: resolvedSourceRepo}
+
+  const sourceInspection = await inspectRepo(selectedInstall.sourceRepo).catch(() => undefined)
   if (sourceInspection?.isGitRepo && sourceInspection.hasWorkingTreeChanges) {
     command.log(formatWarning('Source repo has local changes. Clean the repo before updating centralized skills.'))
     return
@@ -199,7 +203,7 @@ async function runUpdateFlow(command: Command): Promise<void> {
   }
 
   if (sourceInspection?.isGitRepo) {
-    const upstreamStatus = await inspectUpstreamStatus(resolvePath(selected.sourceRepo))
+    const upstreamStatus = await inspectUpstreamStatus(selectedInstall.sourceRepo)
     if (upstreamStatus.state === 'no_upstream') {
       command.log(formatWarning('Source repo has no upstream tracking branch. Using local source repo for preview.'))
     } else if (upstreamStatus.state === 'check_failed') {
@@ -211,7 +215,7 @@ async function runUpdateFlow(command: Command): Promise<void> {
       const shouldPull = await promptConfirm('Pull latest changes from the source repo before previewing centralized changes?')
       if (!shouldPull) return
 
-      const pullOutput = await pullLatest(resolvePath(selected.sourceRepo))
+      const pullOutput = await pullLatest(selectedInstall.sourceRepo)
       if (pullOutput) command.log(pullOutput)
     } else if (upstreamStatus.state === 'up_to_date') {
       command.log(formatSectionLabel('Source status'))
@@ -219,7 +223,7 @@ async function runUpdateFlow(command: Command): Promise<void> {
     }
   }
 
-  const finalPreview = await buildCentralizedPreview({selected, storedConfig, usesLegacyRefreshCompat})
+  const finalPreview = await buildCentralizedPreview({selected: selectedInstall, storedConfig, usesLegacyRefreshCompat})
   if (!finalPreview) {
     command.log(formatWarning('Could not summarize the centralized preview.'))
     return
@@ -228,7 +232,7 @@ async function runUpdateFlow(command: Command): Promise<void> {
   const storedInstalledSkills = storedConfig.installedSkills ?? storedConfig.skills ?? []
   const diff = diffSkills(storedInstalledSkills, finalPreview.installedSkills)
   const contentChangedSkills = getContentChangedSkills(finalPreview, diff)
-  printLines(command.log.bind(command), formatPreviewSummary(selected, finalPreview, diff))
+  printLines(command.log.bind(command), formatPreviewSummary(selectedInstall, finalPreview, diff))
 
   if (diff.added.length === 0 && diff.removed.length === 0 && contentChangedSkills.length === 0) {
     command.log(formatSuccess('Source repo checked. Centralized install unchanged.'))
@@ -240,7 +244,7 @@ async function runUpdateFlow(command: Command): Promise<void> {
 
   if (usesLegacyRefreshCompat) {
     await runPublish(
-      resolvePath(selected.sourceRepo),
+      selectedInstall.sourceRepo,
       storedConfig.bundleName ?? selected.name,
       storedConfig.prefix,
       false
@@ -248,7 +252,7 @@ async function runUpdateFlow(command: Command): Promise<void> {
   } else {
     await runRefresh(selected.installedRoot, false)
   }
-  printLines(command.log.bind(command), formatSyncSummary(selected, finalPreview, diff))
+  printLines(command.log.bind(command), formatSyncSummary(selectedInstall, finalPreview, diff))
 
   const verification = await verifyInstallContentMatchesSource(selected.installedRoot)
   command.log(

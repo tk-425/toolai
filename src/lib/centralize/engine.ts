@@ -4,7 +4,8 @@ import {getConfiguredSkillsRoot} from '../config/toolai-config.js'
 import {resolvePath} from '../fs/path-helpers.js'
 import {SkillManifest, getSkillManifestPath} from '../security/index.js'
 import type {CentralizedInstall} from './types.js'
-import {discoverSkillDirs} from './discovery.js'
+import {discoverSkills} from './discovery.js'
+import {inspectRepo} from './inspect.js'
 import {directoriesDiffer} from './verify.js'
 
 export interface PublishPreview {
@@ -35,6 +36,64 @@ interface StoredInstallConfig {
   prefix: string
   discoveredSkills?: string[]
   installedSkills?: string[]
+}
+
+function candidateMatchesStoredInstallIdentity(candidateDiscoveredSkills: string[], config: StoredInstallConfig): boolean {
+  const expectedDiscoveredSkills = (config.discoveredSkills ?? []).length > 0
+    ? config.discoveredSkills ?? []
+    : (config.installedSkills ?? []).map(skill => {
+        const normalizedPrefix = normalizePrefix(config.prefix)
+        return normalizedPrefix && skill.startsWith(normalizedPrefix)
+          ? skill.slice(normalizedPrefix.length)
+          : skill
+      })
+
+  if (
+    expectedDiscoveredSkills.length > 0
+    && !(expectedDiscoveredSkills.length === candidateDiscoveredSkills.length
+      && expectedDiscoveredSkills.every((value, index) => value === candidateDiscoveredSkills[index]))
+  ) {
+    return false
+  }
+
+  const expectedInstalledSkills = config.installedSkills ?? []
+  if (expectedInstalledSkills.length === 0) return true
+
+  const normalizedPrefix = normalizePrefix(config.prefix)
+  const candidateInstalledSkills = candidateDiscoveredSkills.map(skill => prefixedName(normalizedPrefix, skill))
+  return expectedInstalledSkills.length === candidateInstalledSkills.length
+    && expectedInstalledSkills.every((value, index) => value === candidateInstalledSkills[index])
+}
+
+async function listAncestorCandidates(startPath: string): Promise<string[]> {
+  const candidates: string[] = []
+  let current = resolvePath(startPath)
+
+  while (true) {
+    const info = await pathInfo(current)
+    if (info?.isDirectory()) candidates.push(current)
+
+    const parent = path.dirname(current)
+    if (parent === current) break
+    current = parent
+  }
+
+  return candidates
+}
+
+async function listNestedRecoveryCandidates(candidateRoot: string): Promise<string[]> {
+  const inspection = await inspectRepo(candidateRoot).catch(() => null)
+  if (!inspection) return []
+
+  const nestedCandidates = inspection.nestedSkills
+    .map(skill => skill.path)
+    .sort((a, b) => {
+      const depthA = path.relative(candidateRoot, a).split(path.sep).length
+      const depthB = path.relative(candidateRoot, b).split(path.sep).length
+      return depthA - depthB || a.localeCompare(b)
+    })
+
+  return [...new Set(nestedCandidates)]
 }
 
 async function getCentralRoot(options?: EngineOptions): Promise<string> {
@@ -131,6 +190,52 @@ async function readStoredInstallConfig(installRoot: string): Promise<StoredInsta
   return JSON.parse(contents) as StoredInstallConfig
 }
 
+export async function resolveCentralizedSourceRepo(installedRoot: string): Promise<string> {
+  const resolvedInstallRoot = resolvePath(installedRoot)
+  const config = await readStoredInstallConfig(resolvedInstallRoot)
+  const directSourceRepo = resolvePath(config.sourceRepo)
+  const directInfo = await pathInfo(directSourceRepo)
+
+  if (directInfo?.isDirectory()) {
+    return directSourceRepo
+  }
+
+  const ancestorCandidates = await listAncestorCandidates(directSourceRepo)
+  for (const candidate of ancestorCandidates) {
+    if (candidate === directSourceRepo) continue
+
+    let sawRecoverableCandidate = false
+
+    const discovered = await discoverSkills(candidate).catch(() => null)
+    if (discovered) {
+      sawRecoverableCandidate = true
+      const candidateDiscoveredSkills = discovered.map(skill => skill.name)
+
+      if (candidateMatchesStoredInstallIdentity(candidateDiscoveredSkills, config)) {
+        return candidate
+      }
+    }
+
+    const nestedCandidates = await listNestedRecoveryCandidates(candidate)
+    for (const nestedCandidate of nestedCandidates) {
+      const nestedDiscovered = await discoverSkills(nestedCandidate).catch(() => null)
+      if (!nestedDiscovered) continue
+
+      sawRecoverableCandidate = true
+      const nestedDiscoveredSkills = nestedDiscovered.map(skill => skill.name)
+      if (candidateMatchesStoredInstallIdentity(nestedDiscoveredSkills, config)) {
+        return nestedCandidate
+      }
+    }
+
+    if (sawRecoverableCandidate) {
+      throw new Error('could not resolve centralized source repo from stored install identity')
+    }
+  }
+
+  throw new Error('could not resolve centralized source repo from stored install identity')
+}
+
 async function removeOwnedBundleAliases(input: {
   centralRoot: string
   bundleDir: string
@@ -198,8 +303,9 @@ export async function publishSkills(
   const resolvedRepo = resolvePath(sourceRepo)
   const centralRoot = await getCentralRoot(options)
   const normalizedPrefix = normalizePrefix(prefix)
-  const discoveredDirs = await discoverSkillDirs(resolvedRepo)
-  const discoveredSkills = discoveredDirs.map(dir => basename(dir))
+  const discovered = await discoverSkills(resolvedRepo)
+  const discoveredDirs = discovered.map(skill => skill.path)
+  const discoveredSkills = discovered.map(skill => skill.name)
   const installedSkills = discoveredSkills.map(skill => prefixedName(normalizedPrefix, skill))
   const resolvedBundleName = bundleName || basename(resolvedRepo)
 
@@ -324,8 +430,10 @@ export async function refreshSkills(installedRoot: string, dryRun = false, optio
   const mode = config.mode ?? config.installType
   if (!mode) throw new Error(`centralized config is missing mode/installType: ${join(resolvedInstallRoot, '.centralize-config.json')}`)
 
+  const resolvedSourceRepo = await resolveCentralizedSourceRepo(resolvedInstallRoot)
+
   return publishSkills(
-    config.sourceRepo,
+    resolvedSourceRepo,
     config.bundleName,
     config.prefix,
     dryRun,

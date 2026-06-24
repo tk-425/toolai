@@ -1,4 +1,4 @@
-import {readdir, readFile, stat} from 'node:fs/promises'
+import {readdir, readFile} from 'node:fs/promises'
 import {basename, join, relative} from 'node:path'
 import {execFile} from 'node:child_process'
 import {promisify} from 'node:util'
@@ -6,21 +6,13 @@ import {TOOLAI_CONFIG_PATH} from '../config/paths.js'
 import {getConfiguredCentralizeRepoRoot} from '../config/toolai-config.js'
 import {resolvePath} from '../fs/path-helpers.js'
 import {getIgnoredPrefixes, isIgnored} from './gitignore.js'
+import {readSkillMetadata} from './skill-metadata.js'
 import type {CentralizedInstall, DiscoveredSkill, RepoInspection, RepoLayout} from './types.js'
 
 const execFileAsync = promisify(execFile)
 const EXCLUDED_SEGMENTS = new Set(['.git', 'node_modules', '.venv', 'dist', 'build', '.next', '.turbo', 'coverage'])
 
 export {resolvePath}
-
-async function hasSkillFile(path: string): Promise<boolean> {
-  try {
-    const info = await stat(join(path, 'SKILL.md'))
-    return info.isFile()
-  } catch {
-    return false
-  }
-}
 
 function hasExcludedSegment(repoPath: string, targetPath: string): boolean {
   return relative(repoPath, targetPath)
@@ -43,8 +35,9 @@ async function collectNestedSkills(
     if (hasExcludedSegment(repoPath, fullPath)) continue
     if (isIgnored(repoPath, fullPath, ignoredPrefixes)) continue
 
-    if (await hasSkillFile(fullPath)) {
-      skills.push({name: basename(fullPath), path: fullPath, isRoot: false})
+    const skill = await readSkillMetadata(fullPath, false)
+    if (skill) {
+      skills.push(skill)
       continue
     }
 
@@ -129,9 +122,7 @@ export async function readCentralizedConfig(installRoot: string): Promise<Centra
 
 export async function inspectRepo(repoPath: string): Promise<RepoInspection> {
   const ignoredPrefixes = await getIgnoredPrefixes(repoPath)
-  const rootSkill = (await hasSkillFile(repoPath))
-    ? {name: basename(repoPath), path: repoPath, isRoot: true}
-    : null
+  const rootSkill = await readSkillMetadata(repoPath, true)
 
   const nestedSkills: DiscoveredSkill[] = []
   await collectNestedSkills(repoPath, repoPath, nestedSkills, ignoredPrefixes)
