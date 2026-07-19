@@ -33,6 +33,7 @@ import {
 import {verifyConfigPresence, verifyInstallContentMatchesSource} from '../../lib/centralize/verify.js'
 import {getCancelMessage, PromptCancelled} from '../../lib/link/prompts.js'
 import {formatFieldLabel, formatFieldValue, formatPathValue, formatSectionLabel, formatSuccess, formatWarning} from '../../lib/link/theme.js'
+import {withSpinner} from '../../lib/terminal/spinner.js'
 
 async function pathExists(candidate: string): Promise<boolean> {
   try {
@@ -161,7 +162,7 @@ async function selectPrefix(command: Command, suggestedPrefix: string): Promise<
 }
 
 async function runUpdateFlow(command: Command): Promise<void> {
-  const installs = await listCentralizedInstalls()
+  const installs = await withSpinner('Discovering centralized installs', () => listCentralizedInstalls())
   if (installs.length === 0) {
     command.log(formatWarning('No centralized installs were found.'))
     return
@@ -189,7 +190,7 @@ async function runUpdateFlow(command: Command): Promise<void> {
   const resolvedSourceRepo = await resolveCentralizedSourceRepo(selected.installedRoot).catch(() => resolvePath(selected.sourceRepo))
   const selectedInstall = {...selected, sourceRepo: resolvedSourceRepo}
 
-  const sourceInspection = await inspectRepo(selectedInstall.sourceRepo).catch(() => undefined)
+  const sourceInspection = await withSpinner('Inspecting source repo', () => inspectRepo(selectedInstall.sourceRepo)).catch(() => undefined)
   if (sourceInspection?.isGitRepo && sourceInspection.hasWorkingTreeChanges) {
     command.log(formatWarning('Source repo has local changes. Clean the repo before updating centralized skills.'))
     return
@@ -203,7 +204,7 @@ async function runUpdateFlow(command: Command): Promise<void> {
   }
 
   if (sourceInspection?.isGitRepo) {
-    const upstreamStatus = await inspectUpstreamStatus(selectedInstall.sourceRepo)
+    const upstreamStatus = await withSpinner('Checking source repo updates', () => inspectUpstreamStatus(selectedInstall.sourceRepo))
     if (upstreamStatus.state === 'no_upstream') {
       command.log(formatWarning('Source repo has no upstream tracking branch. Using local source repo for preview.'))
     } else if (upstreamStatus.state === 'check_failed') {
@@ -215,7 +216,7 @@ async function runUpdateFlow(command: Command): Promise<void> {
       const shouldPull = await promptConfirm('Pull latest changes from the source repo before previewing centralized changes?')
       if (!shouldPull) return
 
-      const pullOutput = await pullLatest(selectedInstall.sourceRepo)
+      const pullOutput = await withSpinner('Pulling latest source changes', () => pullLatest(selectedInstall.sourceRepo))
       if (pullOutput) command.log(pullOutput)
     } else if (upstreamStatus.state === 'up_to_date') {
       command.log(formatSectionLabel('Source status'))
@@ -223,7 +224,7 @@ async function runUpdateFlow(command: Command): Promise<void> {
     }
   }
 
-  const finalPreview = await buildCentralizedPreview({selected: selectedInstall, storedConfig, usesLegacyRefreshCompat})
+  const finalPreview = await withSpinner('Previewing centralized changes', () => buildCentralizedPreview({selected: selectedInstall, storedConfig, usesLegacyRefreshCompat}))
   if (!finalPreview) {
     command.log(formatWarning('Could not summarize the centralized preview.'))
     return
@@ -243,18 +244,18 @@ async function runUpdateFlow(command: Command): Promise<void> {
   if (!proceed) return
 
   if (usesLegacyRefreshCompat) {
-    await runPublish(
+    await withSpinner('Publishing centralized changes', () => runPublish(
       selectedInstall.sourceRepo,
       storedConfig.bundleName ?? selected.name,
       storedConfig.prefix,
       false
-    )
+    ))
   } else {
-    await runRefresh(selected.installedRoot, false)
+    await withSpinner('Refreshing centralized changes', () => runRefresh(selected.installedRoot, false))
   }
   printLines(command.log.bind(command), formatSyncSummary(selectedInstall, finalPreview, diff))
 
-  const verification = await verifyInstallContentMatchesSource(selected.installedRoot)
+  const verification = await withSpinner('Verifying centralized install', () => verifyInstallContentMatchesSource(selected.installedRoot))
   command.log(
     verification.ok
       ? formatSuccess('Centralized copy matches local source repo.')
@@ -270,7 +271,7 @@ async function runAddFlow(command: Command): Promise<void> {
   if (repoMode === 'configured') {
     let repos: string[] = []
     try {
-      repos = await discoverConfiguredRepos()
+      repos = await withSpinner('Discovering configured repos', () => discoverConfiguredRepos())
     } catch (error) {
       if (error instanceof ToolaiConfigError) {
         command.log(formatWarning(error.message))
@@ -291,7 +292,7 @@ async function runAddFlow(command: Command): Promise<void> {
     repoPath = resolvePath(await promptInput('Enter the source repo path'))
   }
 
-  const inspection = await inspectRepo(repoPath)
+  const inspection = await withSpinner('Inspecting source repo', () => inspectRepo(repoPath))
   if (inspection.layout === 'none') {
     command.log(formatWarning('No valid skills were discovered in that repo.'))
     return
@@ -391,7 +392,7 @@ async function runAddFlow(command: Command): Promise<void> {
   const proceed = await promptConfirm('Proceed with publish?')
   if (!proceed) return
 
-  const output = await runPublish(repoPath, bundleName, prefix, false)
+  const output = await withSpinner('Publishing centralized skills', () => runPublish(repoPath, bundleName, prefix, false))
   const parsedOutput = parsePublishPreview(output)
   const selectedForSummary = {
     kind: bundleNeeded ? 'bundle' as const : 'standalone' as const,
@@ -413,7 +414,7 @@ async function runAddFlow(command: Command): Promise<void> {
   const verificationRoots = bundleNeeded
     ? [path.join(centralSkillsRoot, bundleName!)]
     : [path.join(centralSkillsRoot, prefix ? `${prefix}-${discoveredSkills[0]}` : discoveredSkills[0])]
-  const verification = await verifyConfigPresence(verificationRoots, pathExists)
+  const verification = await withSpinner('Verifying published skills', () => verifyConfigPresence(verificationRoots, pathExists))
   command.log(verification.ok ? formatSuccess('Publish verified.') : formatWarning(`Missing configs: ${verification.failures.join(', ')}`))
 }
 
