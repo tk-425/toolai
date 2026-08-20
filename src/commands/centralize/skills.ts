@@ -92,6 +92,13 @@ function getSourceRepoDisplayPath(sourceRepo: string, configuredRepoRoot?: strin
   return `/${relativeSourceRepo.split(path.sep).join('/')}`
 }
 
+type CentralizedInstall = Awaited<ReturnType<typeof listCentralizedInstalls>>[number]
+
+function compareCentralizedInstallChoices(a: CentralizedInstall, b: CentralizedInstall): number {
+  const kindOrder = (kind: CentralizedInstall['kind']) => kind === 'bundle' ? 0 : 1
+  return kindOrder(a.kind) - kindOrder(b.kind) || a.name.localeCompare(b.name)
+}
+
 function formatCentralizedInstallChoice(input: {
   kind: 'bundle' | 'standalone'
   name: string
@@ -176,9 +183,10 @@ async function runUpdateFlow(command: Command): Promise<void> {
     if (!(error instanceof ToolaiConfigError)) throw error
   }
 
+  const orderedInstalls = [...installs].sort(compareCentralizedInstallChoices)
   const selectedRoot = await promptSelect(
     'Which centralized install would you like to update?',
-    installs.map(install => ({
+    orderedInstalls.map(install => ({
       name: formatCentralizedInstallChoice({...install, configuredRepoRoot}),
       value: install.installedRoot
     }))
