@@ -1,28 +1,32 @@
-node_modules
-dist
-coverage
-test
-bin
+# Agent config
+.agents/
+.claude/
+.codex/
+.opencode/
+.pi/
+AGENTS.md
+CLAUDE.md
 
-# docs
+# Docs
 .docs/
-docs/superpowers/
+
+# Tool output
+graphify-out/
+
+# Tool config
+.mcp.json
+opencode.json
+.graphifyignore
+
+# Dependencies
+node_modules
+
+# Build output
+dist
+bin
 
 # AI Agents
 .rulez/
-.claude/
-.agents/
-.codex/
-.gemini/
-.opencode/
-.qwen/
-.cursor/
-.mcp.json
-opencode.json
-CLAUDE.md
-GEMINI.md
-QWEN.md
-AGENTS.md
 CONTEXT.md
 
 # BEGIN MCPKIT
@@ -30,9 +34,9 @@ CONTEXT.md
 .mcpkit/
 # END MCPKIT
 
+# Tool state
 .codegraph/
-
 .devflow/
-
 .devflow-archive/
-graphify-out/
+.pipeline/
+.pipeline-archive/
