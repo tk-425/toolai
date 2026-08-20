@@ -5,7 +5,7 @@ export function formatBundleLabel(name: string): string {
 }
 
 export function formatBundleChoiceLabel(name: string): string {
-  return `${name} (Bundle)`
+  return `[Bundle] ${name}`
 }
 
 export function formatChoiceLabel(marker: string, name: string): string {
