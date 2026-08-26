@@ -16,6 +16,7 @@ const PROJECT_PLATFORM_ROOTS = new Map([
   ['Agents', '.agents'],
   ['OpenCode', '.opencode'],
   ['Qwen', '.qwen'],
+  ['Grok', '.grok'],
   ['Pi', '.pi'],
   ['OMP', '.omp']
 ])
