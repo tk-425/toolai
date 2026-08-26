@@ -42,6 +42,7 @@ export const DEFAULT_PLATFORM_CONFIG: ToolaiPlatformConfig[] = [
   {label: 'Agents', base: '~/.agents'},
   {label: 'OpenCode', base: '~/.opencode'},
   {label: 'Qwen', base: '~/.qwen'},
+  {label: 'Grok', base: '~/.grok'},
   {label: 'Pi', base: '~/.pi/agent'},
   {label: 'OMP', base: '~/.omp/agent'}
 ]
