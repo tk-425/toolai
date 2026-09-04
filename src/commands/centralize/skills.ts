@@ -21,7 +21,7 @@ import {
   runPublish,
   runRefresh
 } from '../../lib/centralize/scripts.js'
-import {getConfiguredCentralizeRepoRoot, getConfiguredSkillsRoot} from '../../lib/config/toolai-config.js'
+import {getConfiguredCentralizeRepoRoots, getConfiguredSkillsRoot} from '../../lib/config/toolai-config.js'
 import {ToolaiConfigError} from '../../lib/config/toolai-config.js'
 import {
   buildModeChoices,
@@ -78,18 +78,19 @@ function normalizePrefix(prefix?: string): string {
   return prefix.endsWith('-') ? prefix : `${prefix}-`
 }
 
-function getSourceRepoDisplayPath(sourceRepo: string, configuredRepoRoot?: string): string {
-  if (!configuredRepoRoot) return sourceRepo
+function getSourceRepoDisplayPath(sourceRepo: string, configuredRepoRoots: string[] = []): string {
+  if (configuredRepoRoots.length === 0) return sourceRepo
 
   const resolvedSourceRepo = resolvePath(sourceRepo)
-  const resolvedRepoRoot = resolvePath(configuredRepoRoot)
-  const relativeSourceRepo = path.relative(resolvedRepoRoot, resolvedSourceRepo)
-
-  if (!relativeSourceRepo || relativeSourceRepo.startsWith('..') || path.isAbsolute(relativeSourceRepo)) {
-    return sourceRepo
-  }
-
-  return `/${relativeSourceRepo.split(path.sep).join('/')}`
+  const configuredRepoRoot = configuredRepoRoots
+    .map(resolvePath)
+    .find(root => {
+      const relativePath = path.relative(root, resolvedSourceRepo)
+      return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath))
+    })
+  if (!configuredRepoRoot) return sourceRepo
+  const relativeSourceRepo = path.relative(configuredRepoRoot, resolvedSourceRepo)
+  return relativeSourceRepo ? `/${relativeSourceRepo.split(path.sep).join('/')}` : sourceRepo
 }
 
 type CentralizedInstall = Awaited<ReturnType<typeof listCentralizedInstalls>>[number]
@@ -104,12 +105,12 @@ function formatCentralizedInstallChoice(input: {
   name: string
   prefix: string
   sourceRepo: string
-  configuredRepoRoot?: string
+  configuredRepoRoots?: string[]
 }): string {
   const kindLabel = input.kind === 'bundle' ? pc.cyan('[Bundle]') : pc.yellow('[Standalone]')
   const nameLabel = pc.bold(input.name)
   const prefixLabel = `prefix: "${input.prefix || ''}"`
-  const sourceRepoLabel = formatPathValue(getSourceRepoDisplayPath(input.sourceRepo, input.configuredRepoRoot))
+  const sourceRepoLabel = formatPathValue(getSourceRepoDisplayPath(input.sourceRepo, input.configuredRepoRoots))
   return `${kindLabel} ${nameLabel} ${pc.dim(prefixLabel)} ${sourceRepoLabel}`
 }
 
@@ -175,10 +176,10 @@ async function runUpdateFlow(command: Command): Promise<void> {
     return
   }
 
-  let configuredRepoRoot: string | undefined
+  let configuredRepoRoots: string[] = []
   try {
-    configuredRepoRoot = resolvePath(await getConfiguredCentralizeRepoRoot())
-    command.log(`${formatFieldLabel('Default')} ${formatPathValue(configuredRepoRoot)}`)
+    configuredRepoRoots = await getConfiguredCentralizeRepoRoots()
+    command.log(`${formatFieldLabel('Default')} ${formatPathValue(configuredRepoRoots[0])}`)
   } catch (error) {
     if (!(error instanceof ToolaiConfigError)) throw error
   }
@@ -187,7 +188,7 @@ async function runUpdateFlow(command: Command): Promise<void> {
   const selectedRoot = await promptSelect(
     'Which centralized install would you like to update?',
     orderedInstalls.map(install => ({
-      name: formatCentralizedInstallChoice({...install, configuredRepoRoot}),
+      name: formatCentralizedInstallChoice({...install, configuredRepoRoots}),
       value: install.installedRoot
     }))
   )

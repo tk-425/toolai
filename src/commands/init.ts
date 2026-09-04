@@ -29,7 +29,21 @@ export default class Init extends Command {
 
       const skillsRoot = (await promptInput('What is the central skills location?', existingConfig?.skillsRoot)).trim()
       const agentsRoot = (await promptInput('What is the central agents location?', existingConfig?.agentsRoot)).trim()
-      const centralizeRepoRoot = (await promptInput('What is the bundled source repo location?', existingConfig?.centralizeRepoRoot)).trim()
+      const enteredCentralizeRepoRoot = (await promptInput(
+        'What is the bundled source repo location?',
+        existingConfig?.centralizeRepoRoots[0] ?? existingConfig?.centralizeRepoRoot
+      )).trim()
+      const centralizeRepoRoots = existingConfig?.centralizeRepoRoots.length
+        ? [...existingConfig.centralizeRepoRoots]
+        : [enteredCentralizeRepoRoot]
+      if (existingConfig?.centralizeRepoRoots.length) {
+        let shouldAppendRoot = await promptConfirm('Would you like to add another bundled source repo?', false)
+        while (shouldAppendRoot) {
+          const additionalRoot = (await promptInput('What is the additional bundled source repo location?', '')).trim()
+          if (additionalRoot) centralizeRepoRoots.push(additionalRoot)
+          shouldAppendRoot = await promptConfirm('Would you like to add another bundled source repo?', false)
+        }
+      }
       const basePlatforms = existingConfig?.platforms.length ? existingConfig.platforms : DEFAULT_PLATFORM_CONFIG
       const customPlatforms: ToolaiPlatformConfig[] = []
 
@@ -54,7 +68,8 @@ export default class Init extends Command {
       await writeToolaiConfig({
         skillsRoot,
         agentsRoot,
-        centralizeRepoRoot,
+        centralizeRepoRoots,
+        centralizeRepoRoot: centralizeRepoRoots[0] ?? '',
         platforms: [...basePlatforms, ...customPlatforms]
       }, configPath)
       this.log(formatSuccess(`Initialized toolai config at ${configPath}`))
