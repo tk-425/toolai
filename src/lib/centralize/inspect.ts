@@ -3,7 +3,7 @@ import {basename, join, relative} from 'node:path'
 import {execFile} from 'node:child_process'
 import {promisify} from 'node:util'
 import {TOOLAI_CONFIG_PATH} from '../config/paths.js'
-import {getConfiguredCentralizeRepoRoot} from '../config/toolai-config.js'
+import {getConfiguredCentralizeRepoRoots} from '../config/toolai-config.js'
 import {resolvePath} from '../fs/path-helpers.js'
 import {getIgnoredPrefixes, isIgnored} from './gitignore.js'
 import {readSkillMetadata} from './skill-metadata.js'
@@ -64,7 +64,7 @@ async function detectWorkingTreeChanges(repoPath: string): Promise<boolean> {
 }
 
 export async function readConfiguredRepoRoots(configPath = TOOLAI_CONFIG_PATH): Promise<string[]> {
-  return [resolvePath(await getConfiguredCentralizeRepoRoot(configPath))]
+  return (await getConfiguredCentralizeRepoRoots(configPath)).map(resolvePath)
 }
 
 async function findGitReposUnder(root: string, depth: number, repos: Set<string>): Promise<void> {

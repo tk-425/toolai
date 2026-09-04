@@ -11,6 +11,8 @@ export interface ToolaiPlatformConfig {
 export interface ToolaiConfig {
   skillsRoot: string
   agentsRoot: string
+  centralizeRepoRoots: string[]
+  /** Compatibility alias for the first configured root. */
   centralizeRepoRoot: string
   platforms: ToolaiPlatformConfig[]
 }
@@ -188,13 +190,10 @@ export async function readToolaiConfig(configPath = TOOLAI_CONFIG_PATH): Promise
 
   pushCurrentPlatform()
 
-  if (repoRoots.length > 1) {
-    throw new ToolaiConfigError('toolai config supports only one centralize.skills-dirs entry. Keep a single source repo root.')
-  }
-
   return {
     skillsRoot,
     agentsRoot,
+    centralizeRepoRoots: repoRoots,
     centralizeRepoRoot: repoRoots[0] ?? '',
     platforms
   }
@@ -223,7 +222,7 @@ export async function writeToolaiConfig(config: ToolaiConfig, configPath = TOOLA
       '',
       'centralize:',
       '  skills-dirs:',
-      `    - ${config.centralizeRepoRoot}`,
+      ...(config.centralizeRepoRoots ?? [config.centralizeRepoRoot]).map(root => `    - ${root}`),
       '',
       'platforms:',
       ...platforms.flatMap(platform => [
@@ -270,10 +269,14 @@ export async function getConfiguredAgentsRoot(configPath = TOOLAI_CONFIG_PATH): 
   return config.agentsRoot
 }
 
-export async function getConfiguredCentralizeRepoRoot(configPath = TOOLAI_CONFIG_PATH): Promise<string> {
+export async function getConfiguredCentralizeRepoRoots(configPath = TOOLAI_CONFIG_PATH): Promise<string[]> {
   const config = await requireToolaiConfig(configPath)
-  if (!config.centralizeRepoRoot) {
+  if (config.centralizeRepoRoots.length === 0 || config.centralizeRepoRoots.every(root => !root)) {
     throw new ToolaiConfigError('toolai config is missing centralize.skills-dirs. Run toolai init to update it.')
   }
-  return config.centralizeRepoRoot
+  return config.centralizeRepoRoots
+}
+
+export async function getConfiguredCentralizeRepoRoot(configPath = TOOLAI_CONFIG_PATH): Promise<string> {
+  return (await getConfiguredCentralizeRepoRoots(configPath))[0]
 }
