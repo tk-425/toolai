@@ -20,6 +20,7 @@ describe('toolai config', () => {
     await writeToolaiConfig({
       skillsRoot: '/central/skills',
       agentsRoot: '/central/agents',
+      centralizeRepoRoots: ['/repos/skills'],
       centralizeRepoRoot: '/repos/skills',
       platforms: [
         {label: 'Claude Code', base: '~/.claude'},
@@ -33,6 +34,7 @@ describe('toolai config', () => {
     expect(loaded).toEqual({
       skillsRoot: '/central/skills',
       agentsRoot: '/central/agents',
+      centralizeRepoRoots: ['/repos/skills'],
       centralizeRepoRoot: '/repos/skills',
       platforms: [
         {label: 'Claude Code', base: '~/.claude'},
@@ -58,6 +60,7 @@ describe('toolai config', () => {
     await writeToolaiConfig({
       skillsRoot: '/central/skills',
       agentsRoot: '/central/agents',
+      centralizeRepoRoots: ['/repos/skills'],
       centralizeRepoRoot: '/repos/skills',
       platforms: [
         {label: 'Claude Code 2', base: '~/.claude2'},
@@ -86,6 +89,7 @@ describe('toolai config', () => {
     await writeToolaiConfig({
       skillsRoot: '/central/skills',
       agentsRoot: '/central/agents',
+      centralizeRepoRoots: ['/repos/skills'],
       centralizeRepoRoot: '/repos/skills',
       platforms: [
         {label: 'Claude Code', base: '~/.claude'},
@@ -126,6 +130,7 @@ platforms:
     expect(loaded).toEqual({
       skillsRoot: '/central/skills',
       agentsRoot: '/central/agents',
+      centralizeRepoRoots: ['/repos/skills'],
       centralizeRepoRoot: '/repos/skills',
       platforms: [
         {label: 'Code', base: '~/.code'}
@@ -133,7 +138,21 @@ platforms:
     })
   })
 
-  it('rejects configs with multiple centralize repo roots', async () => {
+  it('parses and serializes multiple centralize repo roots in order', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'toolai-config-multi-root-'))
+    tempRoots.push(root)
+    const configPath = join(root, '.toolai', 'config.yaml')
+    await mkdir(join(root, '.toolai'), {recursive: true})
+    await writeFile(configPath, `centralize:\n  skills-dirs:\n    - /repos/skills # first\n    - /repos/more-skills\n`, 'utf8')
+    const {getConfiguredCentralizeRepoRoot, getConfiguredCentralizeRepoRoots, readToolaiConfig, writeToolaiConfig} = await import('../src/lib/config/toolai-config.js')
+    expect((await readToolaiConfig(configPath)).centralizeRepoRoots).toEqual(['/repos/skills', '/repos/more-skills'])
+    expect(await getConfiguredCentralizeRepoRoots(configPath)).toEqual(['/repos/skills', '/repos/more-skills'])
+    expect(await getConfiguredCentralizeRepoRoot(configPath)).toBe('/repos/skills')
+    await writeToolaiConfig({skillsRoot: '', agentsRoot: '', centralizeRepoRoots: ['/repos/skills', '/repos/more-skills'], centralizeRepoRoot: '/repos/skills', platforms: []}, configPath)
+    expect((await readFile(configPath, 'utf8')).match(/    - \/repos/g)).toHaveLength(2)
+  })
+
+  it('rejects configs with empty centralize repo roots', async () => {
     const root = await mkdtemp(join(tmpdir(), 'toolai-config-multi-root-'))
     tempRoots.push(root)
     const configPath = join(root, '.toolai', 'config.yaml')
@@ -147,18 +166,16 @@ paths:
 
 centralize:
   skills-dirs:
-    - /repos/skills
-    - /repos/more-skills
 
 platforms:
   - label: Code
     base: ~/.code
 `, 'utf8')
 
-    const {readToolaiConfig} = await import('../src/lib/config/toolai-config.js')
+    const {getConfiguredCentralizeRepoRoots} = await import('../src/lib/config/toolai-config.js')
 
-    await expect(readToolaiConfig(configPath)).rejects.toThrow(
-      'toolai config supports only one centralize.skills-dirs entry'
+    await expect(getConfiguredCentralizeRepoRoots(configPath)).rejects.toThrow(
+      'toolai config is missing centralize.skills-dirs'
     )
   })
 })

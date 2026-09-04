@@ -8,5 +8,7 @@ describe('README centralize docs', () => {
     expect(readme).toContain('toolai centralize skills')
     expect(readme).toContain('Add new')
     expect(readme).toContain('Update existing')
+    expect(readme).toContain('every ordered repo root')
+    expect(readme).toContain('preserves existing roots')
   })
 })

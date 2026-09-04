@@ -49,8 +49,9 @@ Bootstrap `~/.toolai/config.yaml` interactively.
 It asks for:
 1. central skills location
 2. central agents location
-3. default source-repo root for `toolai centralize skills` when using `Configured repos`
-4. optional custom global platforms to add on top of the built-in defaults
+3. bundled source-repo root for `toolai centralize skills` when using `Configured repos`
+4. optional additional bundled source-repo roots (existing entries are preserved in order)
+5. optional custom global platforms to add on top of the built-in defaults
 
 If `toolai` is already initialized, it warns and asks whether you want to update the configuration.
 
@@ -158,7 +159,7 @@ Publish skills from source repos into your configured central skills store.
 - shared config lives at `~/.toolai/config.yaml`
 - publish, refresh, and install listing run natively in the CLI
 
-`Configured repos` uses the repo root stored in `toolai init` under `centralize.skills-dirs`.
+`Configured repos` searches every ordered repo root stored under `centralize.skills-dirs`; duplicate repositories are listed once in lexicographic order. Re-running `toolai init` preserves existing roots and only appends another after confirmation. Existing one-entry configurations remain compatible.
 
 Example:
 

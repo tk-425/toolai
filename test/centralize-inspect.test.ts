@@ -68,6 +68,23 @@ describe('centralize inspection', () => {
     expect(result.nestedSkills).toEqual([])
   })
 
+  it('discovers repositories across multiple roots with deduplication and ordering', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'toolai-centralize-config-'))
+    tempRoots.push(root)
+    const first = join(root, 'first')
+    const second = join(root, 'second')
+    await mkdir(join(first, 'z-repo', '.git'), {recursive: true})
+    await mkdir(join(first, 'a-repo', '.git'), {recursive: true})
+    await mkdir(join(second, 'm-repo', '.git'), {recursive: true})
+    const configPath = join(root, '.toolai', 'config.yaml')
+    await mkdir(join(root, '.toolai'), {recursive: true})
+    await writeFile(configPath, `centralize:\n  skills-dirs:\n    - ${first}\n    - ${second}\n    - ${first}\n`, 'utf8')
+    const {discoverConfiguredRepos} = await import('../src/lib/centralize/inspect.js')
+    expect(await discoverConfiguredRepos(configPath)).toEqual([
+      join(first, 'a-repo'), join(second, 'm-repo'), join(first, 'z-repo')
+    ].sort())
+  })
+
   it('requires toolai init before reading configured repo roots', async () => {
     const root = await mkdtemp(join(tmpdir(), 'toolai-centralize-config-'))
     tempRoots.push(root)
