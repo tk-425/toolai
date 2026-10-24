@@ -1,5 +1,5 @@
 import {formatFieldLabel, formatFieldValue, formatPathValue, formatSectionLabel} from '../link/theme.js'
-import type {CentralizedInstall, SkillDiff} from './types.js'
+import type {CentralizedInstall, RemovalPlan, RemovalSummary, SkillDiff} from './types.js'
 import type {PublishPreview} from './scripts.js'
 
 export function diffSkills(previousSkills: string[] = [], nextSkills: string[] = []): SkillDiff {
@@ -107,4 +107,43 @@ export function formatPublishSummary(selected: CentralizedInstall, preview: Publ
     formatRow('Skills', String(preview.installedSkills.length)),
     ...(selected.kind === 'bundle' ? [formatRow('Symlinks', String(preview.installedSkills.length))] : [])
   ]
+}
+
+export function formatRemovalPreview(plan: RemovalPlan): string[] {
+  const lines = [
+    formatSectionLabel('Removal preview'),
+    formatRow('Target', plan.target.name),
+    formatRow('Type', plan.target.kind),
+    ...formatListSection('Paths to delete:', plan.paths.map(formatPathValue)),
+    ...formatListSection('Manifest entries:', plan.manifestEntries)
+  ]
+
+  if (plan.configRewrite) {
+    lines.push(formatRow('Config', plan.configRewrite.configPath, 'path'))
+    const remaining = plan.configRewrite.installedSkills
+    lines.push(...formatListSection('Remaining skills:', remaining.length > 0 ? remaining : ['(none)']))
+  }
+
+  if (plan.removesBundle) {
+    lines.push(formatFieldValue('Removing the last Skill also removes the now-empty bundle.'))
+  }
+
+  return lines
+}
+
+export function formatRemovalSummary(summary: RemovalSummary): string[] {
+  const lines = [
+    formatSectionLabel('Removal complete'),
+    formatRow('Target', summary.target.name),
+    formatRow('Type', summary.target.kind),
+    ...formatListSection('Removed paths:', summary.removedPaths.map(formatPathValue)),
+    ...formatListSection('Manifest entries removed:', summary.removedManifestEntries),
+    ...formatListSection('Skipped paths:', summary.skippedPaths.map(formatPathValue))
+  ]
+
+  if (summary.message) {
+    lines.push(formatFieldValue(summary.message))
+  }
+
+  return lines
 }

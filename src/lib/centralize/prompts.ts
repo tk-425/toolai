@@ -1,6 +1,6 @@
 import {checkbox, confirm, input, select} from '@inquirer/prompts'
 import {isPromptCancel, PromptCancelled} from '../link/prompts.js'
-import type {CentralizeMode, Choice, LayoutChoice, RepoSelectionMode} from './types.js'
+import type {CentralizeMode, Choice, LayoutChoice, RemovalTarget, RemovalTargetValue, RepoSelectionMode} from './types.js'
 
 const SCROLL_HINT_PAGE_SIZE = 10
 
@@ -21,7 +21,47 @@ export function buildModeChoices(): Array<Choice<CentralizeMode>> {
       name: 'Update existing',
       value: 'update',
       description: 'sync an existing centralized install from its source repo'
+    },
+    {
+      name: 'Remove existing',
+      value: 'remove',
+      description: 'remove a centralized skill or bundle from the central store'
     }
+  ]
+}
+
+export function removalTargetValue(target: RemovalTarget): RemovalTargetValue {
+  if (target.kind === 'skill-in-bundle') {
+    return `skill-in-bundle:${target.bundleName ?? ''}:${target.name}`
+  }
+  return `${target.kind}:${target.name}`
+}
+
+export function buildRemovalInstallChoices(targets: RemovalTarget[]): Array<Choice<RemovalTargetValue>> {
+  const ordered = [...targets].sort((a, b) => {
+    const kindOrder = (target: RemovalTarget) => target.kind === 'bundle' ? 0 : 1
+    return kindOrder(a) - kindOrder(b) || a.name.localeCompare(b.name)
+  })
+
+  return ordered.map(target => ({
+    name: target.kind === 'bundle' ? `[Bundle] ${target.name}` : `[Standalone] ${target.name}`,
+    value: removalTargetValue(target),
+    description: target.kind === 'bundle' ? 'whole bundle' : 'standalone skill'
+  }))
+}
+
+export function buildRemovalBundleChoices(bundle: RemovalTarget, members: RemovalTarget[]): Array<Choice<RemovalTargetValue>> {
+  return [
+    {
+      name: 'Remove entire bundle',
+      value: removalTargetValue(bundle),
+      description: 'all skills inside the bundle'
+    },
+    ...members.map(member => ({
+      name: member.name,
+      value: removalTargetValue(member),
+      description: 'single skill inside the bundle'
+    }))
   ]
 }
 

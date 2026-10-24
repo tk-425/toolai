@@ -91,4 +91,63 @@ describe('centralize output', () => {
     expect(lines.some(line => line.includes('Symlinks') && line.includes('1'))).toBe(true)
     expect(lines).not.toContain('{')
   })
+
+  it('formats removal preview and summary for all three target shapes', async () => {
+    const {formatRemovalPreview, formatRemovalSummary} = await import('../src/lib/centralize/output.js')
+
+    const bundlePreview = formatRemovalPreview({
+      target: {kind: 'bundle', name: 'bundle-pack'},
+      paths: ['/central/bundle-pack', '/central/pref-alpha'],
+      manifestEntries: ['pref-alpha', 'pref-beta']
+    })
+    expect(bundlePreview).toContain('Removal preview')
+    expect(bundlePreview.some(line => line.includes('bundle-pack'))).toBe(true)
+    expect(bundlePreview.some(line => line.includes('pref-alpha'))).toBe(true)
+
+    const skillPreview = formatRemovalPreview({
+      target: {kind: 'skill-in-bundle', name: 'pref-alpha', bundleName: 'bundle-pack'},
+      paths: ['/central/bundle-pack/pref-alpha', '/central/pref-alpha'],
+      manifestEntries: ['pref-alpha'],
+      configRewrite: {
+        configPath: '/central/bundle-pack/.centralize-config.json',
+        installedSkills: ['pref-beta'],
+        discoveredSkills: ['beta']
+      },
+      removesBundle: false
+    })
+    expect(skillPreview.some(line => line.includes('Remaining skills'))).toBe(true)
+    expect(skillPreview.some(line => line.includes('pref-beta'))).toBe(true)
+    expect(skillPreview.some(line => line.includes('.centralize-config.json'))).toBe(true)
+
+    const lastSkillPreview = formatRemovalPreview({
+      target: {kind: 'skill-in-bundle', name: 'pref-only', bundleName: 'single-pack'},
+      paths: ['/central/single-pack/pref-only', '/central/pref-only'],
+      manifestEntries: ['pref-only'],
+      configRewrite: {
+        configPath: '/central/single-pack/.centralize-config.json',
+        installedSkills: [],
+        discoveredSkills: []
+      },
+      removesBundle: true
+    })
+    expect(lastSkillPreview.some(line => line.includes('now-empty bundle'))).toBe(true)
+
+    const summary = formatRemovalSummary({
+      target: {kind: 'standalone', name: 'my-skill'},
+      removedPaths: ['/central/my-skill'],
+      removedManifestEntries: ['my-skill'],
+      skippedPaths: []
+    })
+    expect(summary).toContain('Removal complete')
+    expect(summary.some(line => line.includes('my-skill'))).toBe(true)
+
+    const absentSummary = formatRemovalSummary({
+      target: {kind: 'standalone', name: 'my-skill'},
+      removedPaths: [],
+      removedManifestEntries: [],
+      skippedPaths: ['/central/my-skill'],
+      message: 'Target was already removed.'
+    })
+    expect(absentSummary.some(line => line.includes('Target was already removed.'))).toBe(true)
+  })
 })

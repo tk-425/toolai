@@ -1,4 +1,4 @@
-export type CentralizeMode = 'add' | 'update'
+export type CentralizeMode = 'add' | 'update' | 'remove'
 export type LayoutChoice = 'root-only' | 'nested-only' | 'both'
 export type RepoSelectionMode = 'configured' | 'custom'
 export type RepoLayout = 'root-only' | 'nested-only' | 'mixed-layout' | 'none'
@@ -56,4 +56,34 @@ export interface VerificationResult {
 export interface SkillDiff {
   added: string[]
   removed: string[]
+}
+
+export type RemovalTargetKind = 'bundle' | 'standalone' | 'skill-in-bundle'
+
+export interface RemovalTarget {
+  kind: RemovalTargetKind
+  name: string
+  bundleName?: string
+}
+
+export type RemovalTargetValue = `${RemovalTargetKind}:${string}`
+
+export interface RemovalPlan {
+  target: RemovalTarget
+  paths: string[]
+  manifestEntries: string[]
+  configRewrite?: {
+    configPath: string
+    installedSkills: string[]
+    discoveredSkills: string[]
+  }
+  removesBundle?: boolean
+}
+
+export interface RemovalSummary {
+  target: RemovalTarget
+  removedPaths: string[]
+  removedManifestEntries: string[]
+  skippedPaths: string[]
+  message?: string
 }
