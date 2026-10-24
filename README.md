@@ -169,7 +169,7 @@ toolai centralize skills
 
 Long interactive selection lists in this flow show a count plus arrow-key guidance when more choices are available off-screen.
 
-Two modes:
+Three modes:
 
 **Add new** — walks through:
 1. Choose source repo (from configured repos or custom path)
@@ -186,6 +186,14 @@ Two modes:
 3. Optionally pull latest from source
 4. Preview diff (added/removed skills)
 5. Apply update with verification
+
+**Remove existing** — walks through:
+1. Select a removable target (a whole bundle, a standalone Skill, or a single Skill inside a bundle)
+2. Preview exactly what will be deleted and which Manifest entries will be pruned
+3. Confirm removal
+4. Delete the planned footprint and prune the matching Manifest entries
+
+Removal is permanent — the preview plus confirmation is the only guard. Removing the last Skill inside a bundle also removes the now-empty bundle.
 
 Bundle refreshes prune removed source skills from both the bundle directory and their top-level alias symlinks, but only for members owned by that install.
 

@@ -1,4 +1,4 @@
-import {mkdtemp, mkdir, writeFile, rm} from 'node:fs/promises'
+import {mkdtemp, mkdir, readFile, writeFile, rm} from 'node:fs/promises'
 import {join} from 'node:path'
 import {tmpdir} from 'node:os'
 import {afterEach, describe, expect, it, vi} from 'vitest'
@@ -8,6 +8,29 @@ afterEach(() => {
   vi.doUnmock('../src/lib/centralize/engine.js')
   vi.resetModules()
 })
+
+async function seedStandaloneRemovalStore(centralRoot: string, manifestPath: string, name: string): Promise<void> {
+  const skillDir = join(centralRoot, name)
+  await mkdir(skillDir, {recursive: true})
+  await writeFile(join(skillDir, 'SKILL.md'), `---\nname: ${name}\n---\n`)
+  await writeFile(
+    join(skillDir, '.centralize-config.json'),
+    JSON.stringify({
+      mode: 'single-skill-direct-install',
+      sourceRepo: '/repo/example',
+      bundleName: name,
+      prefix: '',
+      installedSkills: [name]
+    })
+  )
+  await writeFile(
+    manifestPath,
+    JSON.stringify({
+      last_updated: '',
+      skills: {[name]: {name, hash: 'h', status: 'pending', updatedAt: '', scannedAt: null}}
+    })
+  )
+}
 
 describe('centralize skills command', () => {
   it('exports the interactive command class', async () => {
@@ -803,5 +826,192 @@ describe('centralize skills command', () => {
     await command.run()
 
     expect(log).toHaveBeenCalledWith(expect.stringContaining('toolai is not initialized. Run toolai init first.'))
+  })
+
+  it('dispatches remove mode through the remove flow and summarizes', async () => {
+    const promptSelect = vi.fn()
+      .mockResolvedValueOnce('remove')
+      .mockResolvedValueOnce('standalone:my-skill')
+    const promptConfirm = vi.fn().mockResolvedValueOnce(true)
+
+    const enumerateRemovalTargets = vi.fn().mockResolvedValue([{kind: 'standalone', name: 'my-skill'}])
+    const buildRemovalPlan = vi.fn().mockResolvedValue({
+      target: {kind: 'standalone', name: 'my-skill'},
+      paths: ['/central/my-skill'],
+      manifestEntries: ['my-skill']
+    })
+    const executeRemoval = vi.fn().mockResolvedValue({
+      target: {kind: 'standalone', name: 'my-skill'},
+      removedPaths: ['/central/my-skill'],
+      removedManifestEntries: ['my-skill'],
+      skippedPaths: []
+    })
+
+    vi.doMock('../src/lib/centralize/prompts.js', async () => {
+      const actual = await vi.importActual<typeof import('../src/lib/centralize/prompts.js')>('../src/lib/centralize/prompts.js')
+      return {...actual, promptSelect, promptConfirm, promptInput: vi.fn()}
+    })
+    vi.doMock('../src/lib/centralize/engine.js', async () => {
+      const actual = await vi.importActual<typeof import('../src/lib/centralize/engine.js')>('../src/lib/centralize/engine.js')
+      return {...actual, enumerateRemovalTargets, buildRemovalPlan, executeRemoval, resolveCentralizedSourceRepo: vi.fn()}
+    })
+    vi.doMock('../src/lib/terminal/spinner.js', () => ({
+      withSpinner: vi.fn(async (_message: string, operation: () => Promise<unknown>) => operation())
+    }))
+
+    const commandModule = await import('../src/commands/centralize/skills.js')
+    const command = new commandModule.default([], {} as never)
+    const log = vi.spyOn(command, 'log').mockImplementation(() => undefined)
+
+    await command.run()
+
+    expect(promptSelect).toHaveBeenNthCalledWith(1, 'What would you like to do?', expect.any(Array))
+    expect(promptSelect).toHaveBeenNthCalledWith(2, 'Which centralized install would you like to remove?', expect.any(Array))
+    expect(promptConfirm).toHaveBeenCalledWith('Proceed with removal?')
+    expect(enumerateRemovalTargets).toHaveBeenCalledTimes(1)
+    expect(buildRemovalPlan).toHaveBeenCalledWith({kind: 'standalone', name: 'my-skill'})
+    expect(executeRemoval).toHaveBeenCalledTimes(1)
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('Removal preview'))
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('Removal complete'))
+  })
+
+  it('dispatches a bundle selection through the whole-bundle-or-single-skill choice', async () => {
+    const promptSelect = vi.fn()
+      .mockResolvedValueOnce('remove')
+      .mockResolvedValueOnce('bundle:bundle-pack')
+      .mockResolvedValueOnce('skill-in-bundle:bundle-pack:pref-alpha')
+    const promptConfirm = vi.fn().mockResolvedValueOnce(true)
+
+    const enumerateRemovalTargets = vi.fn().mockResolvedValue([
+      {kind: 'bundle', name: 'bundle-pack'},
+      {kind: 'skill-in-bundle', name: 'pref-alpha', bundleName: 'bundle-pack'},
+      {kind: 'skill-in-bundle', name: 'pref-beta', bundleName: 'bundle-pack'}
+    ])
+    const buildRemovalPlan = vi.fn().mockResolvedValue({
+      target: {kind: 'skill-in-bundle', name: 'pref-alpha', bundleName: 'bundle-pack'},
+      paths: ['/central/bundle-pack/pref-alpha', '/central/pref-alpha'],
+      manifestEntries: ['pref-alpha']
+    })
+    const executeRemoval = vi.fn().mockResolvedValue({
+      target: {kind: 'skill-in-bundle', name: 'pref-alpha', bundleName: 'bundle-pack'},
+      removedPaths: ['/central/bundle-pack/pref-alpha', '/central/pref-alpha'],
+      removedManifestEntries: ['pref-alpha'],
+      skippedPaths: []
+    })
+
+    vi.doMock('../src/lib/centralize/prompts.js', async () => {
+      const actual = await vi.importActual<typeof import('../src/lib/centralize/prompts.js')>('../src/lib/centralize/prompts.js')
+      return {...actual, promptSelect, promptConfirm, promptInput: vi.fn()}
+    })
+    vi.doMock('../src/lib/centralize/engine.js', async () => {
+      const actual = await vi.importActual<typeof import('../src/lib/centralize/engine.js')>('../src/lib/centralize/engine.js')
+      return {...actual, enumerateRemovalTargets, buildRemovalPlan, executeRemoval, resolveCentralizedSourceRepo: vi.fn()}
+    })
+    vi.doMock('../src/lib/terminal/spinner.js', () => ({
+      withSpinner: vi.fn(async (_message: string, operation: () => Promise<unknown>) => operation())
+    }))
+
+    const commandModule = await import('../src/commands/centralize/skills.js')
+    const command = new commandModule.default([], {} as never)
+    const log = vi.spyOn(command, 'log').mockImplementation(() => undefined)
+
+    await command.run()
+
+    expect(promptSelect).toHaveBeenNthCalledWith(2, 'Which centralized install would you like to remove?', expect.any(Array))
+    expect(promptSelect).toHaveBeenNthCalledWith(3, 'Remove the whole bundle or a single Skill?', expect.any(Array))
+    expect(buildRemovalPlan).toHaveBeenCalledWith({kind: 'skill-in-bundle', name: 'pref-alpha', bundleName: 'bundle-pack'})
+    expect(executeRemoval).toHaveBeenCalledTimes(1)
+  })
+
+  it('remove flow previews and deletes the same plan against a synthetic store', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'toolai-centralize-remove-integration-'))
+    const centralRoot = join(root, 'central')
+    const manifestPath = join(root, 'manifest.json')
+    await mkdir(centralRoot, {recursive: true})
+    await seedStandaloneRemovalStore(centralRoot, manifestPath, 'my-skill')
+
+    const promptSelect = vi.fn()
+      .mockResolvedValueOnce('remove')
+      .mockResolvedValueOnce('standalone:my-skill')
+    const promptConfirm = vi.fn().mockResolvedValueOnce(true)
+
+    vi.doMock('../src/lib/centralize/prompts.js', async () => {
+      const actual = await vi.importActual<typeof import('../src/lib/centralize/prompts.js')>('../src/lib/centralize/prompts.js')
+      return {...actual, promptSelect, promptConfirm, promptInput: vi.fn()}
+    })
+    vi.doMock('../src/lib/config/toolai-config.js', async () => {
+      const actual = await vi.importActual<typeof import('../src/lib/config/toolai-config.js')>('../src/lib/config/toolai-config.js')
+      return {...actual, getConfiguredSkillsRoot: vi.fn().mockResolvedValue(centralRoot)}
+    })
+    vi.doMock('../src/lib/security/index.js', async () => {
+      const actual = await vi.importActual<typeof import('../src/lib/security/index.js')>('../src/lib/security/index.js')
+      return {...actual, getSkillManifestPath: () => manifestPath}
+    })
+    vi.doMock('../src/lib/terminal/spinner.js', () => ({
+      withSpinner: vi.fn(async (_message: string, operation: () => Promise<unknown>) => operation())
+    }))
+
+    try {
+      const commandModule = await import('../src/commands/centralize/skills.js')
+      const command = new commandModule.default([], {} as never)
+      const log = vi.spyOn(command, 'log').mockImplementation(() => undefined)
+
+      await command.run()
+
+      await expect(readFile(join(centralRoot, 'my-skill', 'SKILL.md'), 'utf8')).rejects.toThrow()
+      const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+      expect(manifest.skills).toEqual({})
+
+      const logLines = log.mock.calls.map(call => String(call[0]))
+      expect(logLines.some(line => line.includes('Removal preview'))).toBe(true)
+      expect(logLines.some(line => line.includes('Removal complete'))).toBe(true)
+      expect(logLines.some(line => line.includes('my-skill'))).toBe(true)
+    } finally {
+      await rm(root, {recursive: true, force: true})
+    }
+  })
+
+  it('cancel at the confirmation prompt leaves the store and manifest unchanged', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'toolai-centralize-remove-cancel-'))
+    const centralRoot = join(root, 'central')
+    const manifestPath = join(root, 'manifest.json')
+    await mkdir(centralRoot, {recursive: true})
+    await seedStandaloneRemovalStore(centralRoot, manifestPath, 'my-skill')
+
+    const promptSelect = vi.fn()
+      .mockResolvedValueOnce('remove')
+      .mockResolvedValueOnce('standalone:my-skill')
+    const promptConfirm = vi.fn().mockResolvedValueOnce(false)
+
+    vi.doMock('../src/lib/centralize/prompts.js', async () => {
+      const actual = await vi.importActual<typeof import('../src/lib/centralize/prompts.js')>('../src/lib/centralize/prompts.js')
+      return {...actual, promptSelect, promptConfirm, promptInput: vi.fn()}
+    })
+    vi.doMock('../src/lib/config/toolai-config.js', async () => {
+      const actual = await vi.importActual<typeof import('../src/lib/config/toolai-config.js')>('../src/lib/config/toolai-config.js')
+      return {...actual, getConfiguredSkillsRoot: vi.fn().mockResolvedValue(centralRoot)}
+    })
+    vi.doMock('../src/lib/security/index.js', async () => {
+      const actual = await vi.importActual<typeof import('../src/lib/security/index.js')>('../src/lib/security/index.js')
+      return {...actual, getSkillManifestPath: () => manifestPath}
+    })
+    vi.doMock('../src/lib/terminal/spinner.js', () => ({
+      withSpinner: vi.fn(async (_message: string, operation: () => Promise<unknown>) => operation())
+    }))
+
+    try {
+      const commandModule = await import('../src/commands/centralize/skills.js')
+      const command = new commandModule.default([], {} as never)
+      const log = vi.spyOn(command, 'log').mockImplementation(() => undefined)
+
+      await command.run()
+
+      await expect(readFile(join(centralRoot, 'my-skill', 'SKILL.md'), 'utf8')).resolves.toContain('name: my-skill')
+      const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+      expect(manifest.skills['my-skill']).toBeDefined()
+      expect(manifest.skills['my-skill'].name).toBe('my-skill')
+    } finally {
+      await rm(root, {recursive: true, force: true})
+    }
   })
 })

@@ -2,8 +2,9 @@ import {cp, lstat, mkdir, readFile, readdir, readlink, rename, rm, symlink, writ
 import path, {basename, join, relative} from 'node:path'
 import {getConfiguredSkillsRoot} from '../config/toolai-config.js'
 import {resolvePath} from '../fs/path-helpers.js'
+import {removeSymlinkOnly} from '../fs/symlinks.js'
 import {SkillManifest, getSkillManifestPath} from '../security/index.js'
-import type {CentralizedInstall} from './types.js'
+import type {CentralizedInstall, RemovalPlan, RemovalSummary, RemovalTarget} from './types.js'
 import {discoverSkills} from './discovery.js'
 import {inspectRepo} from './inspect.js'
 import {directoriesDiffer} from './verify.js'
@@ -442,4 +443,162 @@ export async function refreshSkills(installedRoot: string, dryRun = false, optio
       modeHint: mode
     }
   )
+}
+
+export async function enumerateRemovalTargets(options?: EngineOptions): Promise<RemovalTarget[]> {
+  const installs = await listCentralizedInstalls(options)
+  const targets: RemovalTarget[] = []
+
+  for (const install of installs) {
+    if (install.kind === 'standalone') {
+      targets.push({kind: 'standalone', name: install.name})
+      continue
+    }
+
+    targets.push({kind: 'bundle', name: install.name})
+
+    const config = await readStoredInstallConfig(install.installedRoot)
+    for (const skillName of config.installedSkills ?? []) {
+      targets.push({kind: 'skill-in-bundle', name: skillName, bundleName: install.name})
+    }
+  }
+
+  return targets
+}
+
+export async function buildRemovalPlan(target: RemovalTarget, options?: EngineOptions): Promise<RemovalPlan> {
+  const centralRoot = await getCentralRoot(options)
+
+  if (target.kind === 'standalone') {
+    return {
+      target,
+      paths: [join(centralRoot, target.name)],
+      manifestEntries: [target.name]
+    }
+  }
+
+  if (target.kind === 'bundle') {
+    const bundleDir = join(centralRoot, target.name)
+    const config = await readStoredInstallConfig(bundleDir)
+    const installedSkills = config.installedSkills ?? []
+    const ownedAliases: string[] = []
+
+    for (const skillName of installedSkills) {
+      const aliasPath = join(centralRoot, skillName)
+      const info = await pathInfo(aliasPath)
+      if (info?.isSymbolicLink()) {
+        const linkTarget = await readlink(aliasPath)
+        if (linkTarget === `${target.name}/${skillName}`) {
+          ownedAliases.push(aliasPath)
+        }
+      }
+    }
+
+    return {
+      target,
+      paths: [bundleDir, ...ownedAliases],
+      manifestEntries: installedSkills
+    }
+  }
+
+  const bundleName = target.bundleName
+  if (!bundleName) {
+    throw new Error(`skill-in-bundle removal target is missing its bundle: ${target.name}`)
+  }
+
+  const bundleDir = join(centralRoot, bundleName)
+  const config = await readStoredInstallConfig(bundleDir)
+  const installedSkills = config.installedSkills ?? []
+  const discoveredSkills = config.discoveredSkills ?? []
+  const removedIndex = installedSkills.indexOf(target.name)
+  const remainingInstalled = installedSkills.filter((_, index) => index !== removedIndex)
+  const remainingDiscovered = discoveredSkills.filter((_, index) => index !== removedIndex)
+
+  const paths: string[] = [join(bundleDir, target.name)]
+  const aliasPath = join(centralRoot, target.name)
+  const aliasInfo = await pathInfo(aliasPath)
+  if (aliasInfo?.isSymbolicLink()) {
+    const linkTarget = await readlink(aliasPath)
+    if (linkTarget === `${bundleName}/${target.name}`) {
+      paths.push(aliasPath)
+    }
+  }
+
+  return {
+    target,
+    paths,
+    manifestEntries: [target.name],
+    configRewrite: {
+      configPath: join(bundleDir, '.centralize-config.json'),
+      installedSkills: remainingInstalled,
+      discoveredSkills: remainingDiscovered
+    },
+    removesBundle: remainingInstalled.length === 0
+  }
+}
+
+export async function executeRemoval(plan: RemovalPlan, options?: EngineOptions): Promise<RemovalSummary> {
+  const removedPaths: string[] = []
+  const skippedPaths: string[] = []
+
+  for (const candidate of plan.paths) {
+    const info = await pathInfo(candidate)
+    if (!info) {
+      skippedPaths.push(candidate)
+      continue
+    }
+
+    if (info.isSymbolicLink()) {
+      await removeSymlinkOnly(candidate)
+    } else {
+      await rm(candidate, {recursive: true, force: true})
+    }
+    removedPaths.push(candidate)
+  }
+
+  const manifest = getManifest()
+  const currentSkills = (await manifest.read()).skills
+  const removedManifestEntries: string[] = []
+  for (const entry of plan.manifestEntries) {
+    if (!currentSkills[entry]) continue
+    await manifest.removeSkill(entry)
+    removedManifestEntries.push(entry)
+  }
+
+  if (plan.target.kind === 'skill-in-bundle' && plan.configRewrite) {
+    if (plan.removesBundle) {
+      const bundleDir = path.dirname(plan.configRewrite.configPath)
+      const info = await pathInfo(bundleDir)
+      if (info) {
+        await rm(bundleDir, {recursive: true, force: true})
+        removedPaths.push(bundleDir)
+      } else {
+        skippedPaths.push(bundleDir)
+      }
+    } else {
+      const configInfo = await pathInfo(plan.configRewrite.configPath)
+      if (configInfo) {
+        const current = await readStoredInstallConfig(path.dirname(plan.configRewrite.configPath))
+        await writeFile(
+          plan.configRewrite.configPath,
+          JSON.stringify({
+            ...current,
+            installedSkills: plan.configRewrite.installedSkills,
+            discoveredSkills: plan.configRewrite.discoveredSkills
+          }, null, 2),
+          'utf8'
+        )
+      }
+    }
+  }
+
+  const alreadyAbsent = removedPaths.length === 0 && removedManifestEntries.length === 0
+
+  return {
+    target: plan.target,
+    removedPaths,
+    removedManifestEntries,
+    skippedPaths,
+    ...(alreadyAbsent ? {message: 'Target was already removed.'} : {})
+  }
 }

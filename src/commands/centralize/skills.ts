@@ -3,7 +3,7 @@ import {lstat, readFile} from 'node:fs/promises'
 import path from 'node:path'
 import pc from 'picocolors'
 import {detectConflicts, getDefaultBundleName} from '../../lib/centralize/naming.js'
-import {resolveCentralizedSourceRepo} from '../../lib/centralize/engine.js'
+import {buildRemovalPlan, enumerateRemovalTargets, executeRemoval, resolveCentralizedSourceRepo} from '../../lib/centralize/engine.js'
 import {discoverConfiguredRepos, inspectRepo, resolvePath} from '../../lib/centralize/inspect.js'
 import {
   diffSkills,
@@ -11,6 +11,8 @@ import {
   formatPreviewSummary,
   formatPublishPlanSummary,
   formatPublishSummary,
+  formatRemovalPreview,
+  formatRemovalSummary,
   formatSyncSummary
 } from '../../lib/centralize/output.js'
 import {
@@ -25,10 +27,13 @@ import {getConfiguredCentralizeRepoRoots, getConfiguredSkillsRoot} from '../../l
 import {ToolaiConfigError} from '../../lib/config/toolai-config.js'
 import {
   buildModeChoices,
+  buildRemovalBundleChoices,
+  buildRemovalInstallChoices,
   buildRepoSelectionChoices,
   promptConfirm,
   promptInput,
-  promptSelect
+  promptSelect,
+  removalTargetValue
 } from '../../lib/centralize/prompts.js'
 import {verifyConfigPresence, verifyInstallContentMatchesSource} from '../../lib/centralize/verify.js'
 import {getCancelMessage, PromptCancelled} from '../../lib/link/prompts.js'
@@ -427,6 +432,35 @@ async function runAddFlow(command: Command): Promise<void> {
   command.log(verification.ok ? formatSuccess('Publish verified.') : formatWarning(`Missing configs: ${verification.failures.join(', ')}`))
 }
 
+async function runRemoveFlow(command: Command): Promise<void> {
+  const targets = await withSpinner('Discovering removable targets', () => enumerateRemovalTargets())
+  if (targets.length === 0) {
+    command.log(formatWarning('No removable centralized skills were found.'))
+    return
+  }
+
+  const installs = targets.filter(target => target.kind !== 'skill-in-bundle')
+  const selectedValue = await promptSelect('Which centralized install would you like to remove?', buildRemovalInstallChoices(installs))
+  const selectedInstall = installs.find(candidate => removalTargetValue(candidate) === selectedValue)
+  if (!selectedInstall) return
+
+  let target = selectedInstall
+  if (selectedInstall.kind === 'bundle') {
+    const members = targets.filter(candidate => candidate.kind === 'skill-in-bundle' && candidate.bundleName === selectedInstall.name)
+    const bundleValue = await promptSelect('Remove the whole bundle or a single Skill?', buildRemovalBundleChoices(selectedInstall, members))
+    target = [selectedInstall, ...members].find(candidate => removalTargetValue(candidate) === bundleValue) ?? selectedInstall
+  }
+
+  const plan = await withSpinner('Building removal plan', () => buildRemovalPlan(target))
+  printLines(command.log.bind(command), formatRemovalPreview(plan))
+
+  const proceed = await promptConfirm('Proceed with removal?')
+  if (!proceed) return
+
+  const summary = await withSpinner('Removing centralized skill', () => executeRemoval(plan))
+  printLines(command.log.bind(command), formatRemovalSummary(summary))
+}
+
 export default class CentralizeSkills extends Command {
   static override description = 'Interactively centralize skills from source repos'
 
@@ -435,6 +469,8 @@ export default class CentralizeSkills extends Command {
       const mode = await promptSelect('What would you like to do?', buildModeChoices())
       if (mode === 'add') {
         await runAddFlow(this)
+      } else if (mode === 'remove') {
+        await runRemoveFlow(this)
       } else {
         await runUpdateFlow(this)
       }
