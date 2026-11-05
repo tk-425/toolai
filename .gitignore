@@ -38,5 +38,5 @@ CONTEXT.md
 .codegraph/
 .devflow/
 .devflow-archive/
-.pipeline/
+.pipeline*/
 .pipeline-archive/
